@@ -305,7 +305,7 @@ function Index() {
                   <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                     <th className="text-left font-medium px-6 py-3 w-10">#</th>
                     <th className="text-left font-medium py-3">Jogador</th>
-                    <th className="text-left font-medium py-3 hidden sm:table-cell">Bebidas</th>
+                    <th className="text-left font-medium py-3">Bebidas</th>
                     <th className="text-center font-medium py-3 hidden md:table-cell">
                       <span className="inline-flex items-center justify-center gap-1">
                         Jantar pago
@@ -365,7 +365,7 @@ function Index() {
                             {dl.label} · {Math.round(row.prob * 100)}%
                           </div>
                         </td>
-                        <td className="py-4 align-top hidden sm:table-cell">
+                        <td className="py-4 align-top">
                           <DrinkCell
                             player={row.player}
                             wins={row.wins}
