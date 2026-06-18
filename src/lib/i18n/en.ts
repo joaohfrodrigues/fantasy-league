@@ -94,8 +94,8 @@ export const en: Dict = {
     unlockTitle: "Unlock editing",
 
     roundsPlayed: (played: number, total: number) => `${played}/${total} rounds played`,
-    heroTitleA: "Who's buying",
-    heroTitleB: "everyone dinner",
+    heroTitleA: "Who's getting",
+    heroTitleB: "dinner for free",
     heroSubtitle: (remaining: number) =>
       `Live standings and the odds of winning dinner with ${remaining} ${
         remaining === 1 ? "round" : "rounds"
