@@ -220,7 +220,7 @@ function Index() {
               <Trophy className="size-5 text-primary-foreground" />
             </div>
             <div>
-              <div className="font-display font-bold tracking-tight leading-none">Liga dos Amigos</div>
+              <div className="font-display font-bold tracking-tight leading-none">Tentativa de Penúltimos</div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mt-1">
                 FIFA World Cup · Fantasy
               </div>
