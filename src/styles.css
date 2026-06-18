@@ -37,6 +37,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-pitch: var(--pitch);
+  --color-pitch-foreground: var(--pitch-foreground);
   --color-pitch-glow: var(--pitch-glow);
   --color-gold: var(--gold);
 }
@@ -44,54 +45,89 @@
 :root {
   --radius: 0.75rem;
 
-  /* Stadium Night palette */
+  /* =====================================================================
+     FIFA World Cup 2026 palette (TEMPORARY — remove after the tournament)
+     To revert: restore the "Stadium Night" values preserved below.
+     ===================================================================== */
+  --background: oklch(0.19 0.06 264);
+  --foreground: oklch(0.98 0.005 250);
+
+  --surface: oklch(0.23 0.07 264);
+  --surface-elevated: oklch(0.27 0.08 264);
+
+  --card: oklch(0.23 0.07 264);
+  --card-foreground: oklch(0.98 0.005 250);
+  --popover: oklch(0.23 0.07 264);
+  --popover-foreground: oklch(0.98 0.005 250);
+
+  --primary: oklch(0.6 0.23 262); /* vibrant World Cup blue */
+  --primary-foreground: oklch(0.99 0 0);
+
+  --pitch: oklch(0.84 0.18 168); /* aqua / mint */
+  --pitch-foreground: oklch(0.22 0.06 200); /* dark teal for text on mint */
+  --pitch-glow: oklch(0.9 0.19 168);
+  --gold: oklch(0.9 0.18 100); /* electric yellow */
+
+  --secondary: oklch(0.62 0.24 350); /* hot pink / magenta */
+  --secondary-foreground: oklch(0.99 0 0);
+  --muted: oklch(0.3 0.06 264);
+  --muted-foreground: oklch(0.72 0.04 264);
+  --accent: oklch(0.6 0.25 300); /* violet */
+  --accent-foreground: oklch(0.99 0 0);
+
+  --destructive: oklch(0.62 0.24 18);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.4 0.08 264 / 60%);
+  --input: oklch(0.32 0.06 264);
+  --ring: oklch(0.6 0.23 262);
+
+  --gradient-pitch: linear-gradient(135deg, oklch(0.6 0.23 262), oklch(0.62 0.24 350));
+  --shadow-glow: 0 0 40px -10px oklch(0.6 0.23 262 / 55%);
+  --shadow-card: 0 20px 50px -20px oklch(0.06 0.06 264 / 60%);
+
+  /* ----- Original "Stadium Night" palette (restore to revert) -----
   --background: oklch(0.18 0.03 260);
   --foreground: oklch(0.97 0.01 95);
-
   --surface: oklch(0.22 0.04 260);
   --surface-elevated: oklch(0.26 0.05 260);
-
   --card: oklch(0.22 0.04 260);
   --card-foreground: oklch(0.97 0.01 95);
   --popover: oklch(0.22 0.04 260);
   --popover-foreground: oklch(0.97 0.01 95);
-
   --primary: oklch(0.82 0.22 145);
   --primary-foreground: oklch(0.16 0.04 260);
-
   --pitch: oklch(0.82 0.22 145);
   --pitch-glow: oklch(0.88 0.25 145);
   --gold: oklch(0.86 0.16 90);
-
   --secondary: oklch(0.3 0.05 260);
   --secondary-foreground: oklch(0.97 0.01 95);
   --muted: oklch(0.28 0.04 260);
   --muted-foreground: oklch(0.7 0.03 260);
   --accent: oklch(0.3 0.06 260);
   --accent-foreground: oklch(0.97 0.01 95);
-
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.97 0.01 95);
-
   --border: oklch(0.32 0.04 260 / 60%);
   --input: oklch(0.3 0.04 260);
   --ring: oklch(0.82 0.22 145);
-
   --gradient-pitch: linear-gradient(135deg, oklch(0.82 0.22 145), oklch(0.7 0.22 165));
   --shadow-glow: 0 0 40px -10px oklch(0.82 0.22 145 / 50%);
   --shadow-card: 0 20px 50px -20px oklch(0.05 0.05 260 / 60%);
+  ------------------------------------------------------------------ */
 }
 
 .dark {
-  --background: oklch(0.18 0.03 260);
-  --foreground: oklch(0.97 0.01 95);
+  --background: oklch(0.19 0.06 264);
+  --foreground: oklch(0.98 0.005 250);
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
   }
-  html, body {
+  html,
+  body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
@@ -99,27 +135,55 @@
   }
   body {
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.82 0.22 145 / 12%), transparent 60%),
-      radial-gradient(ellipse 60% 40% at 90% 110%, oklch(0.5 0.2 260 / 18%), transparent 60%);
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.6 0.23 262 / 16%), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 110%, oklch(0.62 0.24 350 / 16%), transparent 60%);
     background-attachment: fixed;
     min-height: 100vh;
   }
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
 }
 
 @layer utilities {
-  .text-pitch { color: var(--pitch); }
-  .bg-pitch { background-color: var(--pitch); }
-  .bg-surface { background-color: var(--surface); }
-  .bg-surface-elevated { background-color: var(--surface-elevated); }
-  .border-pitch { border-color: var(--pitch); }
-  .shadow-glow { box-shadow: var(--shadow-glow); }
-  .shadow-card { box-shadow: var(--shadow-card); }
-  .gradient-pitch { background-image: var(--gradient-pitch); }
-  .font-display { font-family: var(--font-display); }
-  .font-mono { font-family: var(--font-mono); }
-  .tabular-nums { font-variant-numeric: tabular-nums; }
+  .text-pitch {
+    color: var(--pitch);
+  }
+  .text-pitch-foreground {
+    color: var(--pitch-foreground);
+  }
+  .bg-pitch {
+    background-color: var(--pitch);
+  }
+  .bg-surface {
+    background-color: var(--surface);
+  }
+  .bg-surface-elevated {
+    background-color: var(--surface-elevated);
+  }
+  .border-pitch {
+    border-color: var(--pitch);
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .gradient-pitch {
+    background-image: var(--gradient-pitch);
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 }

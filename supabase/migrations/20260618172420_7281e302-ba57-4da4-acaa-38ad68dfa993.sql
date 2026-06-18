@@ -1,1 +1,0 @@
-ALTER TABLE public.players ADD COLUMN IF NOT EXISTS drink text NOT NULL DEFAULT '🍺';
