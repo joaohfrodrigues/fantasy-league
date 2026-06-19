@@ -34,8 +34,8 @@ export const en: Dict = {
     metaDescription: "Track your fantasy leagues. Live odds, round prizes and your league history.",
     brandSubtitle: "Track your fantasy leagues · Share the link · See who wins the prize",
     heroEyebrow: "Fantasy Tracker",
-    heroTitleA: "Create your league tracker",
-    heroTitleB: "and see who gets dinner for free",
+    heroTitleA: "Create your tracker",
+    heroTitleB: "and see who eats for free",
     heroSubtitle:
       "Track your fantasy league round by round. You get a link to share and a password to edit scores — with live standings and each player's odds of winning the prize.",
     heroCta: "Create your tracker",

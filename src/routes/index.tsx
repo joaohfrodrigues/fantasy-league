@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   Trophy,
   Plus,
@@ -50,6 +50,7 @@ export const Route = createFileRoute("/")({
 const DEFAULT_PLAYERS = ["", ""];
 const MIN_PASSWORD = 4;
 const MAX_PASSWORD = 8;
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 function slugFromInput(raw: string): string {
   const v = raw.trim();
@@ -351,8 +352,12 @@ function RecentLeagues() {
   const t = useT();
   const [leagues, setLeagues] = useState<RecentLeague[]>([]);
 
-  useEffect(() => {
-    setLeagues(getRecentLeagues());
+  useIsomorphicLayoutEffect(() => {
+    const syncRecentLeagues = () => setLeagues(getRecentLeagues());
+    syncRecentLeagues();
+    const onStorage = () => syncRecentLeagues();
+    globalThis.addEventListener("storage", onStorage);
+    return () => globalThis.removeEventListener("storage", onStorage);
   }, []);
 
   function remove(slug: string) {
