@@ -185,6 +185,8 @@ function Landing() {
         </div>
       </section>
 
+      <RecentLeagues />
+
       <section className="max-w-5xl mx-auto px-6 pb-12">
         <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-5">
           {t.landing.features.title}
@@ -307,8 +309,6 @@ function Landing() {
               <ArrowRight className="size-4" />
             </button>
           </div>
-
-          <RecentLeagues />
         </div>
       </section>
 
@@ -363,10 +363,11 @@ function RecentLeagues() {
   if (leagues.length === 0) return null;
 
   return (
-    <div className="mt-6 pt-5 border-t border-border/60">
-      <h3 className="font-display text-sm font-semibold mb-0.5">{t.landing.recentTitle}</h3>
-      <p className="text-[11px] text-muted-foreground mb-3">{t.landing.recentSubtitle}</p>
-      <ul className="space-y-1.5">
+    <section className="max-w-5xl mx-auto px-6 pb-10">
+      <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
+        {t.landing.recentTitle}
+      </h2>
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {leagues.map((lg, i) => (
           <li
             key={lg.slug}
@@ -376,13 +377,16 @@ function RecentLeagues() {
             <Link
               to="/$slug"
               params={{ slug: lg.slug }}
-              className="flex-1 flex items-center gap-2 min-w-0 rounded-lg px-3 py-2 bg-surface-elevated/50 hover:bg-accent transition-colors"
+              className="flex-1 flex items-center gap-3 min-w-0 rounded-xl px-4 py-3 bg-surface/60 backdrop-blur border border-border hover:border-pitch/40 hover:bg-surface-elevated/50 transition-colors shadow-card"
             >
-              <Trophy className="size-3.5 shrink-0 text-pitch" />
-              <span className="truncate text-sm font-medium">{lg.name}</span>
-              <span className="ml-auto shrink-0 text-[11px] font-mono text-muted-foreground">
-                {lg.slug}
-              </span>
+              <div className="size-8 rounded-lg bg-pitch/15 grid place-items-center shrink-0">
+                <Trophy className="size-4 text-pitch" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold font-display">{lg.name}</p>
+                <p className="text-[11px] font-mono text-muted-foreground">{lg.slug}</p>
+              </div>
+              <ArrowRight className="size-4 ml-auto shrink-0 text-muted-foreground/40 group-hover:text-pitch transition-colors" />
             </Link>
             <button
               type="button"
@@ -396,7 +400,7 @@ function RecentLeagues() {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
