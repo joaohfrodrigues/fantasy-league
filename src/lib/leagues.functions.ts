@@ -44,6 +44,14 @@ function dedupeNonEmpty(values: string[]): string[] {
 
 type RoundInput = { name: string; short: string };
 
+function validateRoundDetails(rawName: unknown, rawShort: unknown): RoundInput {
+  const name = clean(rawName);
+  const short = clean(rawShort);
+  if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
+  if (short.length > MAX_SHORT) throw new Error("INVALID_ROUNDS");
+  return { name, short };
+}
+
 function dedupeRounds(values: RoundInput[]): RoundInput[] {
   const seen = new Set<string>();
   const out: RoundInput[] = [];
@@ -298,6 +306,36 @@ export const verifyLeaguePassword = createServerFn({ method: "POST" })
 
 // --- Add player ---------------------------------------------------------------
 
+export const updateLeagueName = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; name: string }) => {
+    const name = clean(data?.name);
+    if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
+    return { slug: clean(data?.slug), password: String(data?.password ?? ""), name };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+    const { data: existing } = await admin
+      .from("leagues")
+      .select("id, name, slug, tiebreak")
+      .eq("id", leagueId)
+      .maybeSingle();
+    if (!existing) throw new Error("LEAGUE_NOT_FOUND");
+
+    const { error } = await admin.from("leagues").update({ name: data.name }).eq("id", leagueId);
+    if (error) throw new Error("DB_ERROR");
+
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "league",
+      action: "UPDATE",
+      recordId: leagueId,
+      oldValues: existing,
+      newValues: { ...existing, name: data.name },
+    });
+    return { ok: true };
+  });
+
 export const addPlayer = createServerFn({ method: "POST" })
   .inputValidator((data: { slug: string; password: string; name: string }) => {
     const name = clean(data?.name);
@@ -382,13 +420,16 @@ export const removePlayer = createServerFn({ method: "POST" })
 // --- Add round ---------------------------------------------------------------
 
 export const addRound = createServerFn({ method: "POST" })
-  .inputValidator((data: { slug: string; password: string; name?: string }) => {
+  .inputValidator((data: { slug: string; password: string; name?: string; short?: string }) => {
     const name = clean(data?.name);
+    const short = clean(data?.short);
     if (name && name.length > MAX_NAME) throw new Error("INVALID_NAME");
+    if (short.length > MAX_SHORT) throw new Error("INVALID_ROUNDS");
     return {
       slug: clean(data?.slug),
       password: String(data?.password ?? ""),
       name,
+      short,
     };
   })
   .handler(async ({ data }): Promise<{ id: string }> => {
@@ -416,7 +457,7 @@ export const addRound = createServerFn({ method: "POST" })
       .insert({
         league_id: leagueId,
         name,
-        short: String(order),
+        short: data.short || String(order),
         display_order: order,
       })
       .select("id")
@@ -428,9 +469,52 @@ export const addRound = createServerFn({ method: "POST" })
       action: "INSERT",
       recordId: inserted.id,
       oldValues: null,
-      newValues: { name, short: String(order), display_order: order },
+      newValues: { name, short: data.short || String(order), display_order: order },
     });
     return { id: inserted.id };
+  });
+
+export const updateRound = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { slug: string; password: string; roundId: string; name: string; short: string }) => {
+      const { name, short } = validateRoundDetails(data?.name, data?.short);
+      return {
+        slug: clean(data?.slug),
+        password: String(data?.password ?? ""),
+        roundId: clean(data?.roundId),
+        name,
+        short,
+      };
+    },
+  )
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { data: existing } = await admin
+      .from("rounds")
+      .select("id, name, short, display_order, locked_at")
+      .eq("id", data.roundId)
+      .eq("league_id", leagueId)
+      .maybeSingle();
+    if (!existing) throw new Error("ROUND_NOT_FOUND");
+
+    const { error } = await admin
+      .from("rounds")
+      .update({ name: data.name, short: data.short })
+      .eq("id", data.roundId)
+      .eq("league_id", leagueId);
+    if (error) throw new Error("DB_ERROR");
+
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "round",
+      action: "UPDATE",
+      recordId: existing.id,
+      oldValues: existing,
+      newValues: { ...existing, name: data.name, short: data.short },
+    });
+    return { ok: true };
   });
 
 // --- Delete round ------------------------------------------------------------

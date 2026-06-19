@@ -132,7 +132,7 @@ function Footer() {
   return (
     <footer className="border-t border-border/40 py-6">
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        {t.root.madeWithA}
+        © 2026 Fantasy Tracker. {t.root.madeWithA}
         <Heart className="size-3.5 fill-pitch text-pitch" aria-hidden="true" />
         {t.root.madeWithB}
       </p>

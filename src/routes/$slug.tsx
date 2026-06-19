@@ -1,9 +1,11 @@
 import { createFileRoute, useParams, Link } from "@tanstack/react-router";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Trophy,
   Plus,
+  Minus,
   Pencil,
   Loader2,
   UserPlus,
@@ -27,13 +29,18 @@ import {
   Download,
   FlaskConical,
   Scale,
+  Menu,
 } from "lucide-react";
+import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import {
   verifyLeaguePassword,
   addPlayer as addPlayerFn,
   removePlayer as removePlayerFn,
+  updateLeagueName as updateLeagueNameFn,
   addRound as addRoundFn,
   deleteRound as deleteRoundFn,
+  updateRound as updateRoundFn,
   setDrink as setDrinkFn,
   saveScores as saveScoresFn,
   lockRound as lockRoundFn,
@@ -45,7 +52,6 @@ import {
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 
 export const Route = createFileRoute("/$slug")({
@@ -74,6 +80,7 @@ type TiebreakMode = "total" | "wins" | "latest";
 const TIEBREAKS: TiebreakMode[] = ["total", "wins", "latest"];
 
 type RankMetrics = { agg: number; wins: number; latest: number };
+type RoundDetailsInput = { name: string; short: string };
 
 // Order two players for league rank; higher is better. Returns <0 when `a`
 // should rank above `b`.
@@ -142,6 +149,11 @@ function LeagueBoard() {
   const [editing, setEditing] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState("");
+  const [editingLeagueName, setEditingLeagueName] = useState(false);
+  const [creatingRound, setCreatingRound] = useState(false);
+  const [creatingRoundSave, setCreatingRoundSave] = useState(false);
+  const [newRoundDraft, setNewRoundDraft] = useState<RoundDetailsInput>({ name: "", short: "" });
+  const [removePlayerTarget, setRemovePlayerTarget] = useState<Player | null>(null);
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -317,6 +329,25 @@ function LeagueBoard() {
   );
   const roundsRemaining = rounds.length - roundsPlayedIds.length;
 
+  const roundIndexById = useMemo(() => {
+    const m = new Map<string, number>();
+    rounds.forEach((r, idx) => m.set(r.id, idx));
+    return m;
+  }, [rounds]);
+
+  const roundMaxById = useMemo(() => {
+    const m = new Map<string, number>();
+    rounds.forEach((r) => {
+      let max = Number.NEGATIVE_INFINITY;
+      players.forEach((p) => {
+        const v = simMap.get(`${p.id}:${r.id}`);
+        if (typeof v === "number" && v > max) max = v;
+      });
+      if (max !== Number.NEGATIVE_INFINITY) m.set(r.id, max);
+    });
+    return m;
+  }, [rounds, players, simMap]);
+
   const leagueStats = useMemo(() => {
     const all: number[] = [];
     roundsPlayedIds.forEach((rid) => {
@@ -421,18 +452,14 @@ function LeagueBoard() {
     return out;
   }, [players, simMap, playerMean, leagueStats, roundsRemaining, rounds]);
 
-  const standings = useMemo(() => {
+  const baseStandings = useMemo(() => {
     const rows = players.map((p) => {
       const perRound = rounds.map((r) => simMap.get(`${p.id}:${r.id}`) ?? null);
       const agg = perRound.reduce<number>((a, v) => a + (v ?? 0), 0);
-      const wins = rounds.reduce((acc, r) => {
-        const vals = players
-          .map((pp) => simMap.get(`${pp.id}:${r.id}`))
-          .filter((v): v is number => typeof v === "number");
-        if (!vals.length) return acc;
-        const max = Math.max(...vals);
-        const mine = simMap.get(`${p.id}:${r.id}`);
-        return mine === max ? acc + 1 : acc;
+      const wins = rounds.reduce((acc, r, idx) => {
+        const max = roundMaxById.get(r.id);
+        const mine = perRound[idx];
+        return max !== undefined && mine !== null && mine === max ? acc + 1 : acc;
       }, 0);
       const prob = dinnerProb.get(p.id) ?? 0;
       return { player: p, perRound, agg, wins, prob };
@@ -441,13 +468,17 @@ function LeagueBoard() {
     // League rank is always determined by total, independent of the display sort.
     const rankMap = new Map<string, number>();
     [...rows].sort((a, b) => b.agg - a.agg).forEach((r, i) => rankMap.set(r.player.id, i + 1));
-    const withRank = rows.map((r) => ({ ...r, rank: rankMap.get(r.player.id) ?? 0 }));
+    return rows.map((r) => ({ ...r, rank: rankMap.get(r.player.id) ?? 0 }));
+  }, [players, simMap, dinnerProb, rounds, roundMaxById]);
+
+  const standings = useMemo(() => {
+    const withRank = [...baseStandings];
 
     const valueFor = (row: (typeof withRank)[number]): number | null => {
       if (sortKey === "prizes") return row.wins;
       if (sortKey === "dinner") return row.prob;
       if (sortKey === "total") return row.agg;
-      const idx = rounds.findIndex((r) => r.id === sortKey);
+      const idx = roundIndexById.get(sortKey) ?? -1;
       return idx >= 0 ? row.perRound[idx] : row.agg;
     };
 
@@ -462,7 +493,7 @@ function LeagueBoard() {
       return (av - bv) * dir;
     });
     return withRank;
-  }, [players, simMap, dinnerProb, rounds, sortKey, sortDir]);
+  }, [baseStandings, roundIndexById, sortKey, sortDir]);
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -510,10 +541,22 @@ function LeagueBoard() {
     }
   }
 
+  async function renameLeague(name: string) {
+    if (!password) return;
+    try {
+      await updateLeagueNameFn({ data: { slug, password, name } });
+      setEditingLeagueName(false);
+      await loadAll();
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
   async function removePlayer(playerId: string) {
     if (!password) return;
     try {
       await removePlayerFn({ data: { slug, password, playerId } });
+      setRemovePlayerTarget(null);
       loadAll();
     } catch (err) {
       if (isAuthError(err)) handleAuthFailure();
@@ -532,12 +575,29 @@ function LeagueBoard() {
     }
   }
 
-  async function addRound() {
+  async function addRound(details?: RoundDetailsInput) {
     if (!password) return;
     try {
-      const { id } = await addRoundFn({ data: { slug, password } });
+      const { id } = await addRoundFn({ data: { slug, password, ...details } });
       await loadAll();
       setEditing(id);
+      return id;
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
+  function openCreateRound() {
+    const nextOrder = rounds.reduce((max, item) => Math.max(max, item.display_order), 0) + 1;
+    setNewRoundDraft({ name: `${t.board.roundLabel} ${nextOrder}`, short: String(nextOrder) });
+    setCreatingRound(true);
+  }
+
+  async function updateRoundDetails(roundId: string, details: RoundDetailsInput) {
+    if (!password) return;
+    try {
+      await updateRoundFn({ data: { slug, password, roundId, ...details } });
+      await loadAll();
     } catch (err) {
       if (isAuthError(err)) handleAuthFailure();
     }
@@ -673,12 +733,12 @@ function LeagueBoard() {
       {/* Header */}
       <header className="border-b border-border/40 backdrop-blur-sm sticky top-0 z-20 bg-background/70">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="size-9 rounded-lg gradient-pitch grid place-items-center shadow-glow">
+          <Link to="/" className="flex items-center gap-3 group min-w-0">
+            <div className="size-9 shrink-0 rounded-lg gradient-pitch grid place-items-center shadow-glow">
               <Trophy className="size-5 text-primary-foreground" />
             </div>
-            <div>
-              <div className="font-display font-bold tracking-tight leading-none">
+            <div className="min-w-0">
+              <div className="font-display font-bold tracking-tight leading-none truncate">
                 {league?.name}
               </div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mt-1">
@@ -686,8 +746,20 @@ function LeagueBoard() {
               </div>
             </div>
           </Link>
-          <div className="flex items-center gap-2">
+
+          {/* Desktop action row — hidden on mobile */}
+          <div className="hidden md:flex items-center gap-2">
             <LanguageToggle />
+            {unlocked && (
+              <button
+                onClick={() => setEditingLeagueName(true)}
+                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.editLeagueName}
+                aria-label={t.board.editLeagueName}
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            )}
             {unlocked && (
               <button
                 onClick={() => setAddingPlayer(true)}
@@ -749,6 +821,110 @@ function LeagueBoard() {
                 {t.board.editScores}
               </button>
             )}
+          </div>
+
+          {/* Mobile action row — hidden on desktop */}
+          <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            {/* What-if: icon-only on mobile */}
+            <button
+              onClick={toggleWhatIf}
+              className={`inline-flex items-center justify-center size-9 rounded-lg font-medium transition-colors ${
+                whatIfOn
+                  ? "bg-amber-500 text-white shadow-sm hover:bg-amber-500/90"
+                  : "bg-surface-elevated text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+              }`}
+              title={t.board.whatIfTitle}
+              aria-label={t.board.whatIfTitle}
+            >
+              <FlaskConical className="size-4" />
+            </button>
+            {/* Lock/Unlock: icon-only on mobile */}
+            {unlocked ? (
+              <button
+                onClick={lock}
+                className="inline-flex items-center justify-center size-9 rounded-lg bg-pitch/15 text-pitch hover:bg-pitch/25 transition-colors"
+                title={t.board.lockTitle}
+                aria-label={t.board.lockTitle}
+              >
+                <Unlock className="size-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setAskPassword(true)}
+                className="inline-flex items-center justify-center size-9 rounded-lg bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.unlockTitle}
+                aria-label={t.board.unlockTitle}
+              >
+                <Lock className="size-4" />
+              </button>
+            )}
+            {/* Hamburger → bottom sheet for secondary actions */}
+            <Drawer>
+              <DrawerTrigger asChild>
+                <button
+                  className="inline-flex items-center justify-center size-9 rounded-lg bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={t.board.moreActions}
+                >
+                  <Menu className="size-4" />
+                </button>
+              </DrawerTrigger>
+              <DrawerContent className="px-4 pb-8 pt-2">
+                <div className="mt-4 mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground px-1">
+                  {league?.name}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {unlocked && (
+                    <DrawerClose asChild>
+                      <button
+                        onClick={() => setEditingLeagueName(true)}
+                        className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-sm font-medium bg-surface-elevated/50 hover:bg-accent transition-colors"
+                      >
+                        <Pencil className="size-4 text-muted-foreground" />
+                        {t.board.editLeagueName}
+                      </button>
+                    </DrawerClose>
+                  )}
+                  {unlocked && (
+                    <DrawerClose asChild>
+                      <button
+                        onClick={() => setAddingPlayer(true)}
+                        className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-sm font-medium bg-surface-elevated/50 hover:bg-accent transition-colors"
+                      >
+                        <UserPlus className="size-4 text-muted-foreground" />
+                        {t.board.addPlayer}
+                      </button>
+                    </DrawerClose>
+                  )}
+                  {unlocked && (
+                    <DrawerClose asChild>
+                      <button
+                        onClick={() => setShowHistory(true)}
+                        className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-sm font-medium bg-surface-elevated/50 hover:bg-accent transition-colors"
+                      >
+                        <History className="size-4 text-muted-foreground" />
+                        {t.board.history}
+                      </button>
+                    </DrawerClose>
+                  )}
+                  {unlocked && (
+                    <DrawerClose asChild>
+                      <button
+                        onClick={exportData}
+                        className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-sm font-medium bg-surface-elevated/50 hover:bg-accent transition-colors"
+                      >
+                        <Download className="size-4 text-muted-foreground" />
+                        {t.board.exportData}
+                      </button>
+                    </DrawerClose>
+                  )}
+                  {!unlocked && (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      {t.board.moreActionsLocked}
+                    </p>
+                  )}
+                </div>
+              </DrawerContent>
+            </Drawer>
           </div>
         </div>
       </header>
@@ -897,13 +1073,13 @@ function LeagueBoard() {
       {/* Leaderboard */}
       <section className="max-w-6xl mx-auto px-6 pb-24">
         <div className="bg-surface/60 backdrop-blur border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-border/60 gap-3 sm:gap-4">
             <div>
               <h2 className="font-display text-lg font-semibold">{t.board.standings}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t.board.standingsSummary(players.length, rounds.length)}
               </p>
-              {unlocked && (
+              {unlocked ? (
                 <div className="mt-2 flex items-center gap-2">
                   <Scale className="size-3.5 text-muted-foreground" aria-hidden />
                   <label
@@ -924,10 +1100,19 @@ function LeagueBoard() {
                     <option value="latest">{t.board.tiebreakLatest}</option>
                   </select>
                 </div>
+              ) : (
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Scale className="size-3.5 text-muted-foreground" aria-hidden />
+                  <span className="text-[11px] uppercase tracking-wider">{t.board.tiebreak}</span>
+                  <span className="inline-flex items-center rounded-md bg-surface-elevated px-2.5 py-1 text-foreground">
+                    {tiebreakLabel(tiebreak, t)}
+                  </span>
+                  <TiebreakInfo />
+                </div>
               )}
             </div>
             {unlocked && (
-              <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                 {rounds.map((r) => {
                   const played = roundsPlayedIds.includes(r.id);
                   return (
@@ -947,7 +1132,7 @@ function LeagueBoard() {
                   );
                 })}
                 <button
-                  onClick={addRound}
+                  onClick={openCreateRound}
                   className="hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
                   title={t.board.addRound}
                 >
@@ -1065,7 +1250,7 @@ function LeagueBoard() {
                           </span>
                           {unlocked && (
                             <button
-                              onClick={() => removePlayer(row.player.id)}
+                              onClick={() => setRemovePlayerTarget(row.player)}
                               className="text-muted-foreground/40 hover:text-[color:oklch(0.7_0.2_25)] transition-colors"
                               title={t.board.removePlayer}
                             >
@@ -1098,11 +1283,8 @@ function LeagueBoard() {
                       </td>
                       {row.perRound.map((v, idx) => {
                         const rid = rounds[idx].id;
-                        const winners = players
-                          .map((pp) => simMap.get(`${pp.id}:${rid}`))
-                          .filter((x): x is number => typeof x === "number");
-                        const isRoundWin =
-                          v !== null && winners.length > 0 && v === Math.max(...winners);
+                        const roundMax = roundMaxById.get(rid);
+                        const isRoundWin = v !== null && roundMax !== undefined && v === roundMax;
                         const isWhatIf = whatIfOn && whatIf.has(`${row.player.id}:${rid}`);
                         return (
                           <td
@@ -1212,6 +1394,7 @@ function LeagueBoard() {
           onClose={() => setEditing(null)}
           onAddRound={addRound}
           onDeleteRound={deleteRound}
+          onUpdateRound={updateRoundDetails}
           onSetRoundLock={setRoundLock}
           onSaved={() => loadAll()}
         />
@@ -1253,6 +1436,44 @@ function LeagueBoard() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {editingLeagueName && unlocked && league && (
+        <LeagueNameModal
+          initialName={league.name}
+          onClose={() => setEditingLeagueName(false)}
+          onSave={renameLeague}
+        />
+      )}
+
+      {creatingRound && unlocked && (
+        <RoundDetailsModal
+          mode="new"
+          draft={newRoundDraft}
+          saving={creatingRoundSave}
+          onChange={setNewRoundDraft}
+          onClose={() => setCreatingRound(false)}
+          onSave={async () => {
+            setCreatingRoundSave(true);
+            try {
+              await addRound(newRoundDraft);
+              setCreatingRound(false);
+            } finally {
+              setCreatingRoundSave(false);
+            }
+          }}
+        />
+      )}
+
+      {removePlayerTarget && unlocked && (
+        <ConfirmModal
+          title={t.board.removePlayerTitle}
+          body={t.board.removePlayerConfirm(removePlayerTarget.name)}
+          confirmLabel={t.board.removePlayer}
+          tone="danger"
+          onClose={() => setRemovePlayerTarget(null)}
+          onConfirm={() => removePlayer(removePlayerTarget.id)}
+        />
       )}
 
       {askPassword && (
@@ -1358,6 +1579,8 @@ function DrinkCell({
 }) {
   const t = useT();
   const drink = player.drink || "🥇";
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
 
   if (!editable) {
     return (
@@ -1367,43 +1590,63 @@ function DrinkCell({
       </div>
     );
   }
+
+  function handleToggle() {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      if (openUp) {
+        setPickerStyle({
+          position: "fixed",
+          left: rect.left,
+          bottom: window.innerHeight - rect.top + 6,
+          zIndex: 50,
+        });
+      } else {
+        setPickerStyle({ position: "fixed", left: rect.left, top: rect.bottom + 6, zIndex: 50 });
+      }
+    }
+    onToggle();
+  }
+
   return (
     <div className="relative">
       <button
-        onClick={onToggle}
+        ref={triggerRef}
+        onClick={handleToggle}
         className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-accent transition-colors"
         title={t.board.changeRoundPrizeEmoji}
       >
         <span className="text-lg leading-none">{drink}</span>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
       </button>
-      {open && (
-        <>
-          <button
-            type="button"
-            aria-label={t.common.close}
-            className="fixed inset-0 z-30"
-            onClick={onToggle}
-          />
-          <div
-            className={`absolute z-40 left-0 bg-surface border border-border rounded-xl shadow-card p-2 flex gap-1 ${
-              openUp ? "bottom-full mb-2" : "top-full mt-2"
-            }`}
-          >
-            {PRIZE_EMOJIS.map((d) => (
-              <button
-                key={d}
-                onClick={() => onPick(d)}
-                className={`size-9 grid place-items-center rounded-lg text-xl hover:bg-accent transition-colors ${
-                  d === drink ? "bg-pitch/20 ring-1 ring-pitch" : ""
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              aria-label={t.common.close}
+              className="fixed inset-0 z-40"
+              onClick={handleToggle}
+            />
+            <div
+              style={pickerStyle}
+              className="bg-surface border border-border rounded-xl shadow-card p-2 flex gap-1"
+            >
+              {PRIZE_EMOJIS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => onPick(d)}
+                  className={`size-9 grid place-items-center rounded-lg text-xl hover:bg-accent transition-colors ${
+                    d === drink ? "bg-pitch/20 ring-1 ring-pitch" : ""
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -1494,6 +1737,63 @@ function DinnerInfo() {
   );
 }
 
+function TiebreakInfo() {
+  const [open, setOpen] = useState(false);
+  const t = useT();
+  return (
+    <span className="relative inline-flex normal-case">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-muted-foreground/70 hover:text-foreground transition-colors"
+        aria-label={t.board.tiebreakInfoTitle}
+      >
+        <HelpCircle className="size-3.5" />
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label={t.common.close}
+            className="fixed inset-0 z-30 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute z-40 top-7 left-1/2 -translate-x-1/2 w-[min(92vw,24rem)] bg-surface border border-border rounded-2xl shadow-card overflow-hidden text-left">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
+              <span className="grid place-items-center size-7 rounded-lg bg-pitch/15 text-pitch">
+                <Scale className="size-3.5" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
+                  {t.board.tiebreakInfoTitle}
+                </p>
+                <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
+                  {t.board.tiebreakInfoSubtitle}
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-2.5">
+              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+                <span className="text-foreground font-medium">{t.board.tiebreakTotal}</span>{" "}
+                {t.board.tiebreakInfoTotal}
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+                <span className="text-foreground font-medium">{t.board.tiebreakWins}</span>{" "}
+                {t.board.tiebreakInfoWins}
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+                <span className="text-foreground font-medium">{t.board.tiebreakLatest}</span>{" "}
+                {t.board.tiebreakInfoLatest}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
   if (!active) return <ChevronsUpDown className="size-3 opacity-40" />;
   return dir === "desc" ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />;
@@ -1570,6 +1870,175 @@ function DinnerBar({ prob, label, emoji }: { prob: number; label: string; emoji:
         />
       </div>
     </div>
+  );
+}
+
+function LeagueNameModal({
+  initialName,
+  onClose,
+  onSave,
+}: {
+  initialName: string;
+  onClose: () => void;
+  onSave: (name: string) => Promise<void | undefined>;
+}) {
+  const t = useT();
+  const [name, setName] = useState(initialName);
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    const next = name.trim();
+    if (!next) return;
+    setSaving(true);
+    try {
+      await onSave(next);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={t.board.editLeagueName}>
+      <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
+        {t.board.leagueNameLabel}
+      </label>
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder={t.board.leagueNamePlaceholder}
+        className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+      />
+      <div className="flex justify-end gap-2 mt-5">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          {t.common.cancel}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving || !name.trim()}
+          className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? t.common.save : t.common.save}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function RoundDetailsModal({
+  mode,
+  draft,
+  saving,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  mode: "new" | "current";
+  draft: RoundDetailsInput;
+  saving: boolean;
+  onChange: React.Dispatch<React.SetStateAction<RoundDetailsInput>>;
+  onClose: () => void;
+  onSave: () => Promise<void | undefined>;
+}) {
+  const t = useT();
+
+  return (
+    <Modal
+      onClose={onClose}
+      title={mode === "new" ? t.board.createRoundTitle : t.board.editRoundDetails}
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            {t.board.roundNameLabel}
+          </label>
+          <input
+            autoFocus
+            value={draft.name}
+            onChange={(e) => onChange((current) => ({ ...current, name: e.target.value }))}
+            placeholder={t.board.roundNamePlaceholder}
+            className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            {t.board.roundShortLabel}
+          </label>
+          <input
+            value={draft.short}
+            onChange={(e) =>
+              onChange((current) => ({ ...current, short: e.target.value.slice(0, 8) }))
+            }
+            placeholder={t.board.roundShortPlaceholder}
+            className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 font-mono"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          {t.common.cancel}
+        </button>
+        <button
+          onClick={onSave}
+          disabled={saving || !draft.name.trim() || !draft.short.trim()}
+          className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 disabled:opacity-50"
+        >
+          {mode === "new" ? t.common.add : t.common.save}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function ConfirmModal({
+  title,
+  body,
+  confirmLabel,
+  onClose,
+  onConfirm,
+  tone = "default",
+  loading = false,
+}: {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  tone?: "default" | "danger";
+  loading?: boolean;
+}) {
+  const t = useT();
+
+  return (
+    <Modal onClose={onClose} title={title}>
+      <p className="text-sm text-muted-foreground">{body}</p>
+      <div className="flex justify-end gap-2 mt-5">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          {t.common.cancel}
+        </button>
+        <button
+          onClick={() => void onConfirm()}
+          disabled={loading}
+          className={`px-4 py-2 text-sm rounded-lg font-medium shadow-glow hover:opacity-90 disabled:opacity-50 ${
+            tone === "danger"
+              ? "bg-[color:oklch(0.7_0.2_25)] text-white"
+              : "bg-pitch text-pitch-foreground"
+          }`}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -1701,8 +2170,18 @@ function HistoryModal({
       return t.board.historyLine({
         entityType: "league",
         action: entry.action,
-        from: oldV?.tiebreak != null ? tiebreakLabel(String(oldV.tiebreak), t) : "—",
-        to: newV?.tiebreak != null ? tiebreakLabel(String(newV.tiebreak), t) : "—",
+        from:
+          entry.action === "UPDATE"
+            ? (asText(oldV?.name) ?? "—")
+            : oldV?.tiebreak != null
+              ? tiebreakLabel(String(oldV.tiebreak), t)
+              : "—",
+        to:
+          entry.action === "UPDATE"
+            ? (asText(newV?.name) ?? "—")
+            : newV?.tiebreak != null
+              ? tiebreakLabel(String(newV.tiebreak), t)
+              : "—",
       });
     }
     return t.board.historyLine({ entityType: entry.entityType, action: entry.action });
@@ -1749,6 +2228,7 @@ function RoundEditor({
   onClose,
   onAddRound,
   onDeleteRound,
+  onUpdateRound,
   onSetRoundLock,
   onSaved,
 }: {
@@ -1760,8 +2240,9 @@ function RoundEditor({
   scoreMap: Map<string, number>;
   onAuthFailure: () => void;
   onClose: () => void;
-  onAddRound: () => Promise<void>;
+  onAddRound: (details: RoundDetailsInput) => Promise<string | undefined>;
   onDeleteRound: (roundId: string) => Promise<void>;
+  onUpdateRound: (roundId: string, details: RoundDetailsInput) => Promise<void>;
   onSetRoundLock: (roundId: string, locked: boolean) => Promise<void>;
   onSaved: () => void;
 }) {
@@ -1771,6 +2252,10 @@ function RoundEditor({
   const [addingRound, setAddingRound] = useState(false);
   const [deletingRound, setDeletingRound] = useState(false);
   const [togglingLock, setTogglingLock] = useState(false);
+  const [editingRoundDetails, setEditingRoundDetails] = useState<"new" | "current" | null>(null);
+  const [roundDraft, setRoundDraft] = useState<RoundDetailsInput>({ name: "", short: "" });
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingLock, setConfirmingLock] = useState(false);
   const t = useT();
 
   useEffect(() => {
@@ -1788,10 +2273,38 @@ function RoundEditor({
 
   const round = rounds.find((r) => r.id === currentId);
 
+  function openRoundEditor(mode: "new" | "current") {
+    if (mode === "current") {
+      if (!round) return;
+      setRoundDraft({ name: round.name, short: round.short });
+      setEditingRoundDetails("current");
+      return;
+    }
+    const nextOrder = rounds.reduce((max, item) => Math.max(max, item.display_order), 0) + 1;
+    setRoundDraft({ name: `${t.board.roundLabel} ${nextOrder}`, short: String(nextOrder) });
+    setEditingRoundDetails("new");
+  }
+
   async function addRound() {
     setAddingRound(true);
     try {
-      await onAddRound();
+      await onAddRound(roundDraft);
+      setEditingRoundDetails(null);
+    } finally {
+      setAddingRound(false);
+    }
+  }
+
+  async function saveRoundDetails() {
+    if (!round) return;
+    if (editingRoundDetails === "new") {
+      await addRound();
+      return;
+    }
+    setAddingRound(true);
+    try {
+      await onUpdateRound(round.id, roundDraft);
+      setEditingRoundDetails(null);
     } finally {
       setAddingRound(false);
     }
@@ -1799,11 +2312,10 @@ function RoundEditor({
 
   async function deleteRound() {
     if (!round || rounds.length <= 1) return;
-    const confirmed = window.confirm(t.board.deleteRoundConfirm(round.name));
-    if (!confirmed) return;
     setDeletingRound(true);
     try {
       await onDeleteRound(round.id);
+      setConfirmingDelete(false);
     } finally {
       setDeletingRound(false);
     }
@@ -1812,10 +2324,10 @@ function RoundEditor({
   async function toggleLock() {
     if (!round) return;
     const locked = !!round.locked_at;
-    if (!locked && !window.confirm(t.board.lockRoundConfirm(round.name))) return;
     setTogglingLock(true);
     try {
       await onSetRoundLock(round.id, !locked);
+      setConfirmingLock(false);
     } finally {
       setTogglingLock(false);
     }
@@ -1877,7 +2389,14 @@ function RoundEditor({
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={toggleLock}
+                onClick={() => openRoundEditor("current")}
+                className="text-muted-foreground hover:text-foreground p-1"
+                title={t.board.editRoundDetails}
+              >
+                <Pencil className="size-4" />
+              </button>
+              <button
+                onClick={() => (locked ? toggleLock() : setConfirmingLock(true))}
                 disabled={togglingLock}
                 className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-50"
                 title={locked ? t.board.unlockRound : t.board.lockRound}
@@ -1891,7 +2410,7 @@ function RoundEditor({
                 )}
               </button>
               <button
-                onClick={addRound}
+                onClick={() => openRoundEditor("new")}
                 disabled={addingRound}
                 className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-50"
                 title={t.board.addRound}
@@ -1903,7 +2422,7 @@ function RoundEditor({
                 )}
               </button>
               <button
-                onClick={deleteRound}
+                onClick={() => setConfirmingDelete(true)}
                 disabled={deletingRound || rounds.length <= 1}
                 className="text-muted-foreground hover:text-[color:oklch(0.7_0.2_25)] p-1 disabled:opacity-30"
                 title={t.board.deleteRound}
@@ -1999,6 +2518,40 @@ function RoundEditor({
           </div>
         </div>
       </div>
+
+      {editingRoundDetails && (
+        <RoundDetailsModal
+          mode={editingRoundDetails}
+          draft={roundDraft}
+          saving={addingRound}
+          onChange={setRoundDraft}
+          onClose={() => setEditingRoundDetails(null)}
+          onSave={saveRoundDetails}
+        />
+      )}
+
+      {confirmingDelete && round && (
+        <ConfirmModal
+          title={t.board.deleteRound}
+          body={t.board.deleteRoundConfirm(round.name)}
+          confirmLabel={t.board.deleteRound}
+          tone="danger"
+          loading={deletingRound}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={deleteRound}
+        />
+      )}
+
+      {confirmingLock && round && (
+        <ConfirmModal
+          title={t.board.lockRound}
+          body={t.board.lockRoundConfirm(round.name)}
+          confirmLabel={t.board.lockRound}
+          loading={togglingLock}
+          onClose={() => setConfirmingLock(false)}
+          onConfirm={toggleLock}
+        />
+      )}
     </div>
   );
 }
@@ -2017,41 +2570,81 @@ function RowInput({
   const t = useT();
   const numeric = parseDraftPoints(value);
   const sliderValue = numeric == null ? 0 : clamp(numeric, SCORE_MIN, SCORE_MAX);
+  const stepValue = (delta: number) => {
+    const current = numeric ?? 0;
+    onChange(String(clamp(current + delta, SCORE_MIN, SCORE_MAX)));
+  };
 
   return (
     <>
       <div className="font-display text-sm font-medium py-1.5">{name}</div>
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min={SCORE_MIN}
-          max={SCORE_MAX}
-          step={1}
-          value={sliderValue}
-          onChange={(e) => onChange(e.currentTarget.value)}
-          disabled={disabled}
-          className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)] disabled:opacity-50"
-          aria-label={name}
-        />
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={(e) => {
-            const next = parseDraftPoints(e.target.value);
-            if (next === null && e.target.value.trim() !== "") return;
-            onChange(next === null ? "" : String(next));
-          }}
-          placeholder="0"
-          disabled={disabled}
-          className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16 disabled:opacity-50"
-        />
+      <div className="flex items-center justify-end gap-2">
+        <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
+          <input
+            type="range"
+            min={SCORE_MIN}
+            max={SCORE_MAX}
+            step={1}
+            value={sliderValue}
+            onChange={(e) => onChange(e.currentTarget.value)}
+            disabled={disabled}
+            className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)] disabled:opacity-50"
+            aria-label={name}
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={(e) => {
+              const next = parseDraftPoints(e.target.value);
+              if (next === null && e.target.value.trim() !== "") return;
+              onChange(next === null ? "" : String(next));
+            }}
+            placeholder="0"
+            disabled={disabled}
+            className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16 disabled:opacity-50"
+          />
+        </div>
+        <div className="md:hidden shrink-0 flex items-center rounded-lg border border-border bg-input focus-within:border-pitch focus-within:ring-2 focus-within:ring-pitch/20">
+          <button
+            type="button"
+            aria-label="Decrease"
+            onClick={() => stepValue(-1)}
+            disabled={disabled || (numeric ?? 0) <= SCORE_MIN}
+            className="flex h-9 w-9 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Minus className="size-4" aria-hidden="true" />
+          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={(e) => {
+              const next = parseDraftPoints(e.target.value);
+              if (next === null && e.target.value.trim() !== "") return;
+              onChange(next === null ? "" : String(next));
+            }}
+            placeholder="0"
+            disabled={disabled}
+            className="w-12 border-x border-border bg-transparent py-1.5 text-center text-sm font-mono tabular-nums outline-none disabled:opacity-50"
+          />
+          <button
+            type="button"
+            aria-label="Increase"
+            onClick={() => stepValue(1)}
+            disabled={disabled || (numeric ?? 0) >= SCORE_MAX}
+            className="flex h-9 w-9 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => onChange("")}
           disabled={disabled}
-          className="px-2 py-1 text-[11px] rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground disabled:opacity-30"
+          className="shrink-0 px-2 py-1 text-[11px] rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground disabled:opacity-30"
           title={t.board.clearScore}
         >
           <X className="size-3" />

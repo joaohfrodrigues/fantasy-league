@@ -39,12 +39,13 @@ export const en: Dict = {
     heroSubtitle:
       "Track your fantasy league round by round. You get a link to share and a password to edit scores — with live standings and each player's odds of winning the prize.",
     heroCta: "Create your tracker",
-    heroFootnote: '* "Dinner for free" is just an example — your league can play for any prize.',
+    heroFootnote: "* Dinner is just an example — your league can play for any prize.",
 
     features: {
       title: "Why use the tracker",
       simulateTitle: "Simulated finish",
-      simulateDesc: "We project every remaining round to show each player's live odds of winning.",
+      simulateDesc:
+        "We project every remaining round to show each player's live odds of winning — and you can run what-if scenarios to see how future results would shift them.",
       prizesTitle: "Winners & prizes",
       prizesDesc: "Every round winner and prize is recorded, round by round.",
       historyTitle: "League history",
@@ -137,7 +138,19 @@ export const en: Dict = {
     createOne: "Create a league",
 
     addPlayer: "Add player",
+    editLeagueName: "Rename league",
+    leagueNameLabel: "League name",
+    leagueNamePlaceholder: "League name",
+    removePlayerTitle: "Remove player",
+    removePlayerConfirm: (name: string) =>
+      `Remove ${name} from this league? Their scores will also be removed.`,
     addRound: "Add round",
+    createRoundTitle: "Create round",
+    editRoundDetails: "Edit round details",
+    roundNameLabel: "Round name",
+    roundNamePlaceholder: "Round name",
+    roundShortLabel: "Short name",
+    roundShortPlaceholder: "Short label",
     deleteRound: "Delete round",
     deleteRoundConfirm: (name: string) => `Delete ${name}? Scores in this round will be removed.`,
     lockRound: "Lock round",
@@ -153,6 +166,8 @@ export const en: Dict = {
 
     exportData: "Export",
     exportTitle: "Download a JSON backup of this league",
+    moreActions: "More actions",
+    moreActionsLocked: "Unlock to access more actions.",
 
     whatIf: "What-if",
     whatIfTitle: "Explore hypothetical results without saving",
@@ -172,6 +187,11 @@ export const en: Dict = {
     tiebreakTotal: "Total points only",
     tiebreakWins: "Most round wins",
     tiebreakLatest: "Best latest round",
+    tiebreakInfoTitle: "How tie-break works",
+    tiebreakInfoSubtitle: "Used when players have the same total points.",
+    tiebreakInfoTotal: "keeps tied players level unless another ranking signal breaks the tie.",
+    tiebreakInfoWins: "puts the player with more round wins ahead.",
+    tiebreakInfoLatest: "puts the player with the better most recent round ahead.",
 
     history: "History",
     historyTitle: "Edit history",
@@ -201,12 +221,16 @@ export const en: Dict = {
           return `Round locked: ${e.round}`;
         case "round:UNLOCK":
           return `Round unlocked: ${e.round}`;
+        case "round:UPDATE":
+          return `Round updated: ${e.round}`;
         case "player:INSERT":
           return `Player added: ${e.player}`;
         case "player:DELETE":
           return `Player removed: ${e.player}`;
         case "drink:UPDATE":
           return `${e.player} prize: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        case "league:UPDATE":
+          return `League renamed: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         case "league:TIEBREAK":
           return `Tie-break rule: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         default:
@@ -221,7 +245,7 @@ export const en: Dict = {
       `Live standings and the odds of winning the prize with ${remaining} ${
         remaining === 1 ? "round" : "rounds"
       } left to play.`,
-    heroFootnote: '* "Dinner for free" is just an example — your league can play for any prize.',
+    heroFootnote: "* Dinner is just an example — your league can play for any prize.",
 
     standings: "Standings",
     standingsSummary: (players: number, rounds: number) =>
@@ -232,8 +256,8 @@ export const en: Dict = {
     pointsButton: "Scores",
 
     colPlayer: "Player",
-    colRoundPrizes: "Round prizes",
-    colDinner: "Prize won",
+    colRoundPrizes: "Rounds won",
+    colDinner: "Who takes the prize?",
     colTotal: "Total",
 
     winsBadgeTitle: (n: number) => `${n} ${n === 1 ? "round won" : "rounds won"}`,

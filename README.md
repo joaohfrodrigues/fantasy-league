@@ -9,6 +9,11 @@ The app was then generalized so anyone can use it for any soccer (football) fant
 - Create a fantasy league board with players and rounds.
 - Track round-by-round scores manually.
 - Estimate each player's probability of winning based on the remaining rounds.
+- Explore what-if scenarios by layering hypothetical future scores without saving them.
+- Choose a tie-break rule for players level on points (total, most round wins, or best latest round).
+- Lock rounds once they are final to protect them from further edits.
+- Review a league-level history of edits, lock changes, and prize updates.
+- Export a JSON snapshot of a league for backup or portability.
 - Share a public league link while protecting edits with a shared password.
 - Re-open recent leagues from the same browser.
 - Use the app in English or Portuguese.
@@ -64,7 +69,7 @@ cp .env.example .env
 
 3. Fill in the required variables in `.env`.
 
-4. Apply the database migration from `supabase/migrations/20260618180000_multi_league_schema.sql` to your Supabase project.
+4. Apply the database migrations in `supabase/migrations/` to your Supabase project, in filename (timestamp) order.
 
 5. Start the app:
 

@@ -40,13 +40,13 @@ export const pt = {
     heroSubtitle:
       "Acompanha a tua liga fantasy ronda a ronda. Recebes um link para partilhar e uma palavra-passe para editar os pontos — com classificação ao vivo e a probabilidade de cada um ganhar o prémio.",
     heroCta: "Cria o teu tracker",
-    heroFootnote: '* "Jantar à pala" é só um exemplo — a tua liga pode jogar por qualquer prémio.',
+    heroFootnote: "* Jantar é só um exemplo — a tua liga pode jogar por qualquer prémio.",
 
     features: {
       title: "Porquê usar o tracker",
       simulateTitle: "Final simulado",
       simulateDesc:
-        "Projetamos todas as rondas que faltam para mostrar a probabilidade de cada jogador ganhar.",
+        "Projetamos todas as rondas que faltam para mostrar a probabilidade de cada jogador ganhar — e podes simular cenários hipotéticos para ver como os resultados futuros a alterariam.",
       prizesTitle: "Vencedores e prémios",
       prizesDesc: "Cada vencedor de ronda e respetivo prémio fica registado, ronda a ronda.",
       historyTitle: "Histórico de ligas",
@@ -140,7 +140,19 @@ export const pt = {
     createOne: "Criar uma liga",
 
     addPlayer: "Adicionar jogador",
+    editLeagueName: "Renomear liga",
+    leagueNameLabel: "Nome da liga",
+    leagueNamePlaceholder: "Nome da liga",
+    removePlayerTitle: "Remover jogador",
+    removePlayerConfirm: (name: string) =>
+      `Remover ${name} desta liga? As pontuações dele também serão apagadas.`,
     addRound: "Adicionar ronda",
+    createRoundTitle: "Criar ronda",
+    editRoundDetails: "Editar detalhes da ronda",
+    roundNameLabel: "Nome da ronda",
+    roundNamePlaceholder: "Nome da ronda",
+    roundShortLabel: "Nome curto",
+    roundShortPlaceholder: "Etiqueta curta",
     deleteRound: "Remover ronda",
     deleteRoundConfirm: (name: string) => `Remover ${name}? Os pontos desta ronda serão apagados.`,
     lockRound: "Bloquear ronda",
@@ -156,6 +168,8 @@ export const pt = {
 
     exportData: "Exportar",
     exportTitle: "Descarregar uma cópia JSON desta liga",
+    moreActions: "Mais ações",
+    moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
     whatIf: "E se",
     whatIfTitle: "Explorar resultados hipotéticos sem guardar",
@@ -175,6 +189,12 @@ export const pt = {
     tiebreakTotal: "Apenas pontos totais",
     tiebreakWins: "Mais rondas ganhas",
     tiebreakLatest: "Melhor última ronda",
+    tiebreakInfoTitle: "Como funciona o desempate",
+    tiebreakInfoSubtitle: "Usado quando os jogadores têm os mesmos pontos totais.",
+    tiebreakInfoTotal:
+      "mantém os jogadores empatados a menos que outro sinal de ranking desfaça o empate.",
+    tiebreakInfoWins: "coloca à frente quem ganhou mais rondas.",
+    tiebreakInfoLatest: "coloca à frente quem teve a melhor ronda mais recente.",
 
     history: "Histórico",
     historyTitle: "Histórico de edições",
@@ -204,12 +224,16 @@ export const pt = {
           return `Ronda bloqueada: ${e.round}`;
         case "round:UNLOCK":
           return `Ronda desbloqueada: ${e.round}`;
+        case "round:UPDATE":
+          return `Ronda atualizada: ${e.round}`;
         case "player:INSERT":
           return `Jogador adicionado: ${e.player}`;
         case "player:DELETE":
           return `Jogador removido: ${e.player}`;
         case "drink:UPDATE":
           return `Prémio de ${e.player}: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        case "league:UPDATE":
+          return `Liga renomeada: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         case "league:TIEBREAK":
           return `Regra de desempate: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         default:
@@ -224,7 +248,7 @@ export const pt = {
       `Classificação em tempo real, probabilidade de ganhar o prémio com ${remaining} ${
         remaining === 1 ? "ronda" : "rondas"
       } por jogar.`,
-    heroFootnote: '* "Jantar à pala" é só um exemplo — a tua liga pode jogar por qualquer prémio.',
+    heroFootnote: "* Jantar é só um exemplo — a tua liga pode jogar por qualquer prémio.",
 
     standings: "Classificação",
     standingsSummary: (players: number, rounds: number) =>
@@ -236,8 +260,8 @@ export const pt = {
     pointsButton: "Pontos",
 
     colPlayer: "Jogador",
-    colRoundPrizes: "Premios por ronda",
-    colDinner: "Prémio ganho",
+    colRoundPrizes: "Rondas ganhas",
+    colDinner: "Quem leva a taça?",
     colTotal: "Total",
 
     winsBadgeTitle: (n: number) => `${n} ${n === 1 ? "ronda ganha" : "rondas ganhas"}`,
