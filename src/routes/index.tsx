@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Trophy,
   Plus,
+  Minus,
   X,
   Loader2,
   Copy,
@@ -500,18 +501,37 @@ function TemplateSizeField({
     if (!Number.isFinite(n)) return;
     onChange(Math.min(max, Math.max(min, n)));
   }
+  const step = (delta: number) => commit(String(value + delta));
   return (
     <div className="mt-3 flex items-center justify-between gap-3">
       <label className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</label>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => commit(e.target.value)}
-        className="w-20 bg-input border border-border rounded-lg px-3 py-2 text-sm text-center outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
-      />
+      <div className="flex items-center rounded-lg border border-border bg-input focus-within:border-pitch focus-within:ring-2 focus-within:ring-pitch/20">
+        <button
+          type="button"
+          aria-label="Decrease"
+          onClick={() => step(-1)}
+          disabled={value <= min}
+          className="flex h-9 w-9 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Minus className="size-4" aria-hidden="true" />
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => commit(e.target.value)}
+          className="w-10 border-x border-border bg-transparent py-1.5 text-center text-sm font-mono tabular-nums outline-none"
+        />
+        <button
+          type="button"
+          aria-label="Increase"
+          onClick={() => step(1)}
+          disabled={value >= max}
+          className="flex h-9 w-9 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
