@@ -8,11 +8,20 @@
 import { createServerFn } from "@tanstack/react-start";
 
 const MAX_NAME = 80;
+const MAX_SHORT = 8;
 const MAX_PLAYERS = 40;
 const MAX_ROUNDS = 40;
+const MIN_ROUNDS = 1;
 const SLUG_RETRIES = 6;
+const MIN_PASSWORD = 4;
+const MAX_PASSWORD = 8;
 
-export type CreateLeagueResult = { slug: string; password: string; name: string };
+export type CreateLeagueResult = {
+  slug: string;
+  password: string;
+  name: string;
+  generatedPassword: boolean;
+};
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -28,6 +37,23 @@ function dedupeNonEmpty(values: string[]): string[] {
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(t);
+  }
+  return out;
+}
+
+type RoundInput = { name: string; short: string };
+
+function dedupeRounds(values: RoundInput[]): RoundInput[] {
+  const seen = new Set<string>();
+  const out: RoundInput[] = [];
+  for (const v of values) {
+    const name = typeof v?.name === "string" ? v.name.trim() : "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rawShort = typeof v?.short === "string" ? v.short.trim() : "";
+    out.push({ name, short: rawShort || String(out.length + 1) });
   }
   return out;
 }
@@ -72,22 +98,30 @@ async function authorize(admin: AdminClient, slug: string, password: string): Pr
 // --- Create league -----------------------------------------------------------
 
 export const createLeague = createServerFn({ method: "POST" })
-  .inputValidator((data: { name: string; playerNames: string[]; roundNames: string[] }) => {
-    const name = clean(data?.name);
-    const playerNames = dedupeNonEmpty(Array.isArray(data?.playerNames) ? data.playerNames : []);
-    const roundNames = dedupeNonEmpty(Array.isArray(data?.roundNames) ? data.roundNames : []);
-    if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
-    if (playerNames.length < 2 || playerNames.length > MAX_PLAYERS)
-      throw new Error("INVALID_PLAYERS");
-    if (roundNames.length < 1 || roundNames.length > MAX_ROUNDS) throw new Error("INVALID_ROUNDS");
-    if (
-      playerNames.some((n) => n.length > MAX_NAME) ||
-      roundNames.some((n) => n.length > MAX_NAME)
-    ) {
-      throw new Error("INVALID_NAME");
-    }
-    return { name, playerNames, roundNames };
-  })
+  .inputValidator(
+    (data: { name: string; playerNames: string[]; rounds: RoundInput[]; password?: string }) => {
+      const name = clean(data?.name);
+      const playerNames = dedupeNonEmpty(Array.isArray(data?.playerNames) ? data.playerNames : []);
+      const rounds = dedupeRounds(Array.isArray(data?.rounds) ? data.rounds : []);
+      const password = typeof data?.password === "string" ? data.password.trim() : "";
+      if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
+      if (playerNames.length < 2 || playerNames.length > MAX_PLAYERS)
+        throw new Error("INVALID_PLAYERS");
+      if (rounds.length < MIN_ROUNDS || rounds.length > MAX_ROUNDS)
+        throw new Error("INVALID_ROUNDS");
+      if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD)) {
+        throw new Error("INVALID_PASSWORD");
+      }
+      if (
+        playerNames.some((n) => n.length > MAX_NAME) ||
+        rounds.some((r) => r.name.length > MAX_NAME)
+      ) {
+        throw new Error("INVALID_NAME");
+      }
+      if (rounds.some((r) => r.short.length > MAX_SHORT)) throw new Error("INVALID_ROUNDS");
+      return { name, playerNames, rounds, password };
+    },
+  )
   .handler(async ({ data }): Promise<CreateLeagueResult> => {
     const admin = await getAdmin();
     const { generateSlug, generatePassword, hashPassword } = await import("./crypto.server");
@@ -118,7 +152,8 @@ export const createLeague = createServerFn({ method: "POST" })
       throw new Error("DB_ERROR");
     }
 
-    const password = generatePassword();
+    const generatedPassword = !data.password;
+    const password = generatedPassword ? generatePassword() : data.password;
     const { hash, salt } = await hashPassword(password);
     const { error: credErr } = await admin
       .from("league_credentials")
@@ -137,10 +172,10 @@ export const createLeague = createServerFn({ method: "POST" })
       })),
     );
     const { error: roundsErr } = await admin.from("rounds").insert(
-      data.roundNames.map((name, idx) => ({
+      data.rounds.map((r, idx) => ({
         league_id: league.id,
-        name,
-        short: String(idx + 1),
+        name: r.name,
+        short: r.short,
         display_order: idx + 1,
       })),
     );
@@ -150,7 +185,7 @@ export const createLeague = createServerFn({ method: "POST" })
       throw new Error("DB_ERROR");
     }
 
-    return { slug, password, name: data.name };
+    return { slug, password, name: data.name, generatedPassword };
   });
 
 // --- Verify password ----------------------------------------------------------
@@ -160,16 +195,21 @@ export const verifyLeaguePassword = createServerFn({ method: "POST" })
     slug: clean(data?.slug),
     password: typeof data?.password === "string" ? data.password : "",
   }))
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    const admin = await getAdmin();
-    try {
-      await authorize(admin, data.slug, data.password);
-      return { ok: true };
-    } catch (err) {
-      if (err instanceof Error && err.message === "WRONG_PASSWORD") return { ok: false };
-      throw err;
-    }
-  });
+  .handler(
+    async ({ data }): Promise<{ ok: boolean; reason?: "WRONG_PASSWORD" | "SERVER_ERROR" }> => {
+      const admin = await getAdmin();
+      try {
+        await authorize(admin, data.slug, data.password);
+        return { ok: true };
+      } catch (err) {
+        if (err instanceof Error && err.message === "WRONG_PASSWORD") {
+          return { ok: false, reason: "WRONG_PASSWORD" };
+        }
+        console.error("[verifyLeaguePassword] verification failed:", err);
+        return { ok: false, reason: "SERVER_ERROR" };
+      }
+    },
+  );
 
 // --- Add player ---------------------------------------------------------------
 
@@ -227,6 +267,107 @@ export const removePlayer = createServerFn({ method: "POST" })
       .eq("id", data.playerId)
       .eq("league_id", leagueId);
     if (error) throw new Error("DB_ERROR");
+    return { ok: true };
+  });
+
+// --- Add round ---------------------------------------------------------------
+
+export const addRound = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; name?: string }) => {
+    const name = clean(data?.name);
+    if (name && name.length > MAX_NAME) throw new Error("INVALID_NAME");
+    return {
+      slug: clean(data?.slug),
+      password: String(data?.password ?? ""),
+      name,
+    };
+  })
+  .handler(async ({ data }): Promise<{ id: string }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { count } = await admin
+      .from("rounds")
+      .select("id", { count: "exact", head: true })
+      .eq("league_id", leagueId);
+    if ((count ?? 0) >= MAX_ROUNDS) throw new Error("TOO_MANY_ROUNDS");
+
+    const { data: last } = await admin
+      .from("rounds")
+      .select("display_order")
+      .eq("league_id", leagueId)
+      .order("display_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const order = (last?.display_order ?? 0) + 1;
+    const name = data.name || `Round ${order}`;
+
+    const { data: inserted, error } = await admin
+      .from("rounds")
+      .insert({
+        league_id: leagueId,
+        name,
+        short: String(order),
+        display_order: order,
+      })
+      .select("id")
+      .single();
+    if (error || !inserted) throw new Error("DB_ERROR");
+    return { id: inserted.id };
+  });
+
+// --- Delete round ------------------------------------------------------------
+
+export const deleteRound = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; roundId: string }) => ({
+    slug: clean(data?.slug),
+    password: String(data?.password ?? ""),
+    roundId: clean(data?.roundId),
+  }))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { count } = await admin
+      .from("rounds")
+      .select("id", { count: "exact", head: true })
+      .eq("league_id", leagueId);
+    if ((count ?? 0) <= MIN_ROUNDS) throw new Error("MIN_ROUNDS");
+
+    const { data: target } = await admin
+      .from("rounds")
+      .select("id")
+      .eq("id", data.roundId)
+      .eq("league_id", leagueId)
+      .maybeSingle();
+    if (!target) throw new Error("ROUND_NOT_FOUND");
+
+    const { error: deleteErr } = await admin
+      .from("rounds")
+      .delete()
+      .eq("id", data.roundId)
+      .eq("league_id", leagueId);
+    if (deleteErr) throw new Error("DB_ERROR");
+
+    const { data: remaining, error: listErr } = await admin
+      .from("rounds")
+      .select("id, display_order")
+      .eq("league_id", leagueId)
+      .order("display_order", { ascending: true });
+    if (listErr) throw new Error("DB_ERROR");
+
+    for (let i = 0; i < (remaining ?? []).length; i++) {
+      const nextOrder = i + 1;
+      const row = remaining?.[i];
+      if (!row || row.display_order === nextOrder) continue;
+      const { error: reorderErr } = await admin
+        .from("rounds")
+        .update({ display_order: nextOrder })
+        .eq("id", row.id)
+        .eq("league_id", leagueId);
+      if (reorderErr) throw new Error("DB_ERROR");
+    }
+
     return { ok: true };
   });
 
