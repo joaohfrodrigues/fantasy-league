@@ -968,7 +968,7 @@ function LeagueBoard() {
                 </span>
                 <div>
                   <h2 className="font-display text-lg font-semibold">{t.board.whatIfActive}</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                  <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
                     {t.board.whatIfBanner}
                   </p>
                 </div>
@@ -1085,7 +1085,7 @@ function LeagueBoard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-border/60 gap-3 sm:gap-4">
             <div>
               <h2 className="font-display text-lg font-semibold">{t.board.standings}</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
                 {t.board.standingsSummary(players.length, rounds.length)}
               </p>
               {unlocked ? (
@@ -1093,7 +1093,7 @@ function LeagueBoard() {
                   <Scale className="size-3.5 text-muted-foreground" aria-hidden />
                   <label
                     htmlFor="tiebreak-select"
-                    className="text-[11px] uppercase tracking-wider text-muted-foreground"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
                   >
                     {t.board.tiebreak}
                   </label>
@@ -1112,7 +1112,7 @@ function LeagueBoard() {
               ) : (
                 <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <Scale className="size-3.5 text-muted-foreground" aria-hidden />
-                  <span className="text-[11px] uppercase tracking-wider">{t.board.tiebreak}</span>
+                  <span className="text-xs uppercase tracking-wider">{t.board.tiebreak}</span>
                   <span className="inline-flex items-center rounded-md bg-surface-elevated px-2.5 py-1 text-foreground">
                     {tiebreakLabel(tiebreak, t)}
                   </span>
@@ -1171,7 +1171,7 @@ function LeagueBoard() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                <tr className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-medium px-6 py-3 w-10">#</th>
                   <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
                   <th className="text-left font-medium py-3">
@@ -1303,7 +1303,7 @@ function LeagueBoard() {
                         return (
                           <td
                             key={rid}
-                            className="text-center font-mono text-xs tabular-nums px-1.5 hidden lg:table-cell align-top py-4"
+                            className="text-center font-mono text-xs lg:text-sm tabular-nums px-1.5 hidden lg:table-cell align-top py-4"
                           >
                             {v === null ? (
                               <span className="text-muted-foreground/30">—</span>

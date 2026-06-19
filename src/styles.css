@@ -188,6 +188,13 @@
   }
 }
 
+/* Bump the rem base one step on large screens so all rem-based sizes scale up. */
+@media (min-width: 1280px) {
+  html {
+    font-size: 17px;
+  }
+}
+
 /* Transient highlight applied to a standings row when its score changes live. */
 @keyframes row-flash {
   0% {

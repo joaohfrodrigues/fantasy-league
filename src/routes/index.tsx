@@ -236,7 +236,9 @@ function Landing() {
         {/* Create league */}
         <div className="bg-surface/60 backdrop-blur border border-border rounded-2xl shadow-card p-6">
           <h2 className="font-display text-lg font-semibold mb-1">{t.landing.createTitle}</h2>
-          <p className="text-xs text-muted-foreground mb-5">{t.landing.createSubtitle}</p>
+          <p className="text-xs lg:text-sm text-muted-foreground mb-5">
+            {t.landing.createSubtitle}
+          </p>
 
           <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
             {t.landing.leagueNameLabel}
@@ -297,7 +299,7 @@ function Landing() {
         {/* Open existing league */}
         <div className="bg-surface/60 backdrop-blur border border-border rounded-2xl shadow-card p-6 h-fit">
           <h2 className="font-display text-lg font-semibold mb-1">{t.landing.openTitle}</h2>
-          <p className="text-xs text-muted-foreground mb-5">{t.landing.openSubtitle}</p>
+          <p className="text-xs lg:text-sm text-muted-foreground mb-5">{t.landing.openSubtitle}</p>
           <div className="flex gap-2">
             <input
               value={openCode}
