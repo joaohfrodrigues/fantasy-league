@@ -719,3 +719,285 @@ export const getAuditLog = createServerFn({ method: "POST" })
     }));
     return { entries };
   });
+
+// --- Export / import (JSON snapshot) ------------------------------------------
+
+export const SNAPSHOT_VERSION = 1;
+const MAX_DRINK = 8;
+const POINTS_MIN = -10000;
+const POINTS_MAX = 100000;
+// A valid league has at most one score per (player, round) pair, so this is the
+// hard ceiling on snapshot scores. Used to reject oversized arrays up front,
+// before any O(n) parsing work runs on attacker-controlled input.
+const MAX_SCORES = MAX_PLAYERS * MAX_ROUNDS;
+
+export type LeagueSnapshot = {
+  version: number;
+  exportedAt: string;
+  league: { name: string };
+  players: { name: string; drink: string }[];
+  rounds: { name: string; short: string }[];
+  scores: { player: number; round: number; points: number }[];
+};
+
+/** Build a portable, versioned JSON snapshot of a league (requires the password). */
+export const exportLeague = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string }) => ({
+    slug: clean(data?.slug),
+    password: String(data?.password ?? ""),
+  }))
+  .handler(async ({ data }): Promise<LeagueSnapshot> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { data: league, error: leagueErr } = await admin
+      .from("leagues")
+      .select("name")
+      .eq("id", leagueId)
+      .single();
+    if (leagueErr || !league) throw new Error("DB_ERROR");
+
+    const { data: players, error: playersErr } = await admin
+      .from("players")
+      .select("id, name, drink, display_order")
+      .eq("league_id", leagueId)
+      .order("display_order", { ascending: true });
+    if (playersErr) throw new Error("DB_ERROR");
+
+    const { data: rounds, error: roundsErr } = await admin
+      .from("rounds")
+      .select("id, name, short, display_order")
+      .eq("league_id", leagueId)
+      .order("display_order", { ascending: true });
+    if (roundsErr) throw new Error("DB_ERROR");
+
+    const playerIndex = new Map((players ?? []).map((p, idx) => [p.id, idx]));
+    const roundIndex = new Map((rounds ?? []).map((r, idx) => [r.id, idx]));
+    const playerIds = [...playerIndex.keys()];
+
+    const { data: scores, error: scoresErr } = playerIds.length
+      ? await admin.from("scores").select("player_id, round_id, points").in("player_id", playerIds)
+      : { data: [] as { player_id: string; round_id: string; points: number }[], error: null };
+    if (scoresErr) throw new Error("DB_ERROR");
+
+    const snapshotScores: LeagueSnapshot["scores"] = [];
+    for (const s of scores ?? []) {
+      const player = playerIndex.get(s.player_id);
+      const round = roundIndex.get(s.round_id);
+      if (player === undefined || round === undefined) continue;
+      snapshotScores.push({ player, round, points: s.points });
+    }
+
+    return {
+      version: SNAPSHOT_VERSION,
+      exportedAt: new Date().toISOString(),
+      league: { name: league.name },
+      players: (players ?? []).map((p) => ({ name: p.name, drink: p.drink })),
+      rounds: (rounds ?? []).map((r) => ({ name: r.name, short: r.short })),
+      scores: snapshotScores,
+    };
+  });
+
+type ParsedSnapshot = {
+  name: string;
+  players: { name: string; drink: string }[];
+  rounds: { name: string; short: string }[];
+  scores: { player: number; round: number; points: number }[];
+  password: string;
+};
+
+function parsePlayers(raw: unknown[]): { name: string; drink: string }[] {
+  const seen = new Set<string>();
+  const players: { name: string; drink: string }[] = [];
+  for (const item of raw) {
+    const p = (item ?? {}) as Record<string, unknown>;
+    const name = clean(p.name);
+    if (!name || name.length > MAX_NAME) throw new Error("INVALID_SNAPSHOT");
+    const key = name.toLowerCase();
+    if (seen.has(key)) throw new Error("INVALID_SNAPSHOT");
+    seen.add(key);
+    const drinkRaw = clean(p.drink);
+    const drink = drinkRaw.slice(0, MAX_DRINK) || "🍺";
+    players.push({ name, drink });
+  }
+  if (players.length < 2 || players.length > MAX_PLAYERS) throw new Error("INVALID_SNAPSHOT");
+  return players;
+}
+
+function parseRounds(raw: unknown[]): { name: string; short: string }[] {
+  const seen = new Set<string>();
+  const rounds: { name: string; short: string }[] = [];
+  for (const item of raw) {
+    const r = (item ?? {}) as Record<string, unknown>;
+    const name = clean(r.name);
+    if (!name || name.length > MAX_NAME) throw new Error("INVALID_SNAPSHOT");
+    const key = name.toLowerCase();
+    if (seen.has(key)) throw new Error("INVALID_SNAPSHOT");
+    seen.add(key);
+    const shortRaw = clean(r.short);
+    if (shortRaw.length > MAX_SHORT) throw new Error("INVALID_SNAPSHOT");
+    rounds.push({ name, short: shortRaw || String(rounds.length + 1) });
+  }
+  if (rounds.length < MIN_ROUNDS || rounds.length > MAX_ROUNDS) throw new Error("INVALID_SNAPSHOT");
+  return rounds;
+}
+
+function parseScores(
+  raw: unknown[],
+  playerCount: number,
+  roundCount: number,
+): { player: number; round: number; points: number }[] {
+  const scores: { player: number; round: number; points: number }[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const s = (item ?? {}) as Record<string, unknown>;
+    const player = Number(s.player);
+    const round = Number(s.round);
+    const points = Number(s.points);
+    if (!Number.isInteger(player) || player < 0 || player >= playerCount)
+      throw new Error("INVALID_SNAPSHOT");
+    if (!Number.isInteger(round) || round < 0 || round >= roundCount)
+      throw new Error("INVALID_SNAPSHOT");
+    if (!Number.isFinite(points)) throw new Error("INVALID_SNAPSHOT");
+    const key = `${player}:${round}`;
+    if (seen.has(key)) throw new Error("INVALID_SNAPSHOT");
+    seen.add(key);
+    const clamped = Math.max(POINTS_MIN, Math.min(POINTS_MAX, Math.trunc(points)));
+    scores.push({ player, round, points: clamped });
+  }
+  return scores;
+}
+
+/** Create a brand-new league from a JSON snapshot. Does not touch existing leagues. */
+export const importLeague = createServerFn({ method: "POST" })
+  .inputValidator((data: { snapshot: unknown; password?: string }): ParsedSnapshot => {
+    const snap = (data?.snapshot ?? null) as Record<string, unknown> | null;
+    if (!snap || typeof snap !== "object") throw new Error("INVALID_SNAPSHOT");
+
+    const version = Number(snap.version);
+    if (!Number.isFinite(version) || version < 1 || version > SNAPSHOT_VERSION)
+      throw new Error("UNSUPPORTED_VERSION");
+
+    const leagueObj = (snap.league ?? {}) as Record<string, unknown>;
+    const name = clean(leagueObj.name);
+    if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
+
+    const rawPlayers = Array.isArray(snap.players) ? snap.players : [];
+    const rawRounds = Array.isArray(snap.rounds) ? snap.rounds : [];
+    const rawScores = Array.isArray(snap.scores) ? snap.scores : [];
+    // Reject oversized input before the per-item loops run: array `.length` is
+    // O(1), so a malicious 10M-element array is refused immediately instead of
+    // being fully iterated.
+    if (
+      rawPlayers.length > MAX_PLAYERS ||
+      rawRounds.length > MAX_ROUNDS ||
+      rawScores.length > MAX_SCORES
+    ) {
+      throw new Error("INVALID_SNAPSHOT");
+    }
+
+    const players = parsePlayers(rawPlayers);
+    const rounds = parseRounds(rawRounds);
+    const scores = parseScores(rawScores, players.length, rounds.length);
+
+    const password = typeof data?.password === "string" ? data.password.trim() : "";
+    if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD))
+      throw new Error("INVALID_PASSWORD");
+
+    return { name, players, rounds, scores, password };
+  })
+  .handler(async ({ data }): Promise<CreateLeagueResult> => {
+    const admin = await getAdmin();
+    const { generateSlug, generatePassword, hashPassword } = await import("./crypto.server");
+
+    let slug = "";
+    for (let i = 0; i < SLUG_RETRIES; i++) {
+      const candidate = generateSlug();
+      const { data: existing } = await admin
+        .from("leagues")
+        .select("id")
+        .eq("slug", candidate)
+        .maybeSingle();
+      if (!existing) {
+        slug = candidate;
+        break;
+      }
+    }
+    if (!slug) throw new Error("SLUG_GENERATION_FAILED");
+
+    const { data: league, error: leagueErr } = await admin
+      .from("leagues")
+      .insert({ slug, name: data.name })
+      .select("id")
+      .single();
+    if (leagueErr || !league) {
+      console.error("[importLeague] insert league failed:", leagueErr);
+      throw new Error("DB_ERROR");
+    }
+
+    const generatedPassword = !data.password;
+    const password = generatedPassword ? generatePassword() : data.password;
+    const { hash, salt } = await hashPassword(password);
+    const { error: credErr } = await admin
+      .from("league_credentials")
+      .insert({ league_id: league.id, password_hash: hash, password_salt: salt });
+    if (credErr) {
+      console.error("[importLeague] insert credentials failed:", credErr);
+      await admin.from("leagues").delete().eq("id", league.id);
+      throw new Error("DB_ERROR");
+    }
+
+    const { data: insertedPlayers, error: playersErr } = await admin
+      .from("players")
+      .insert(
+        data.players.map((p, idx) => ({
+          league_id: league.id,
+          name: p.name,
+          drink: p.drink,
+          display_order: idx + 1,
+        })),
+      )
+      .select("id, display_order");
+    const { data: insertedRounds, error: roundsErr } = await admin
+      .from("rounds")
+      .insert(
+        data.rounds.map((r, idx) => ({
+          league_id: league.id,
+          name: r.name,
+          short: r.short,
+          display_order: idx + 1,
+        })),
+      )
+      .select("id, display_order");
+    if (playersErr || roundsErr || !insertedPlayers || !insertedRounds) {
+      console.error("[importLeague] insert players/rounds failed:", { playersErr, roundsErr });
+      await admin.from("leagues").delete().eq("id", league.id);
+      throw new Error("DB_ERROR");
+    }
+
+    if (data.scores.length) {
+      const playerIdByIndex = new Map(insertedPlayers.map((p) => [p.display_order - 1, p.id]));
+      const roundIdByIndex = new Map(insertedRounds.map((r) => [r.display_order - 1, r.id]));
+      const scoreRows = data.scores
+        .map((s) => {
+          const playerId = playerIdByIndex.get(s.player);
+          const roundId = roundIdByIndex.get(s.round);
+          if (!playerId || !roundId) return null;
+          return { player_id: playerId, round_id: roundId, points: s.points };
+        })
+        .filter(
+          (row): row is { player_id: string; round_id: string; points: number } => row !== null,
+        );
+
+      if (scoreRows.length) {
+        const { error: scoresErr } = await admin.from("scores").insert(scoreRows);
+        if (scoresErr) {
+          console.error("[importLeague] insert scores failed:", scoresErr);
+          await admin.from("leagues").delete().eq("id", league.id);
+          throw new Error("DB_ERROR");
+        }
+      }
+    }
+
+    return { slug, password, name: data.name, generatedPassword };
+  });

@@ -100,6 +100,14 @@ export const pt = {
     openPlaceholder: "link ou código",
     openAria: "Abrir liga",
 
+    importTitle: "Importar de ficheiro",
+    importSubtitle: "Cria uma nova liga a partir de uma cópia JSON.",
+    importButton: "Escolher ficheiro",
+    importErrParse: "Esse ficheiro não é JSON válido.",
+    importErrTooLarge: "Esse ficheiro é demasiado grande para ser uma cópia de liga.",
+    importErrVersion: "Esta cópia foi feita com uma versão não suportada.",
+    importErrInvalid: "Não foi possível importar esta cópia.",
+
     recentTitle: "Ligas recentes",
     recentSubtitle: "Ligas que abriste neste dispositivo.",
     recentRemove: "Remover da lista",
@@ -144,6 +152,9 @@ export const pt = {
     lockTitle: "Bloquear edição",
     editScores: "Editar pontos",
     unlockTitle: "Desbloquear edição",
+
+    exportData: "Exportar",
+    exportTitle: "Descarregar uma cópia JSON desta liga",
 
     history: "Histórico",
     historyTitle: "Histórico de edições",

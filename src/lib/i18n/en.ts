@@ -98,6 +98,14 @@ export const en: Dict = {
     openPlaceholder: "link or code",
     openAria: "Open league",
 
+    importTitle: "Import from file",
+    importSubtitle: "Create a new league from a JSON backup.",
+    importButton: "Choose file",
+    importErrParse: "That file isn't valid JSON.",
+    importErrTooLarge: "That file is too large to be a league backup.",
+    importErrVersion: "This backup was made with an unsupported version.",
+    importErrInvalid: "Couldn't import this backup.",
+
     recentTitle: "Recent leagues",
     recentSubtitle: "Leagues you've opened on this device.",
     recentRemove: "Remove from list",
@@ -141,6 +149,9 @@ export const en: Dict = {
     lockTitle: "Lock editing",
     editScores: "Edit scores",
     unlockTitle: "Unlock editing",
+
+    exportData: "Export",
+    exportTitle: "Download a JSON backup of this league",
 
     history: "History",
     historyTitle: "Edit history",

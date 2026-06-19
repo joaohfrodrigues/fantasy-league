@@ -24,6 +24,7 @@ import {
   Swords,
   Gauge,
   History,
+  Download,
 } from "lucide-react";
 import {
   verifyLeaguePassword,
@@ -36,6 +37,7 @@ import {
   lockRound as lockRoundFn,
   unlockRound as unlockRoundFn,
   getAuditLog as getAuditLogFn,
+  exportLeague as exportLeagueFn,
   type AuditEntry,
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
@@ -491,6 +493,26 @@ function LeagueBoard() {
     }
   }
 
+  async function exportData() {
+    if (!password) return;
+    try {
+      const snapshot = await exportLeagueFn({ data: { slug, password } });
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-muted-foreground">
@@ -561,6 +583,16 @@ function LeagueBoard() {
               >
                 <History className="size-4" />
                 {t.board.history}
+              </button>
+            )}
+            {unlocked && (
+              <button
+                onClick={exportData}
+                className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.exportTitle}
+              >
+                <Download className="size-4" />
+                {t.board.exportData}
               </button>
             )}
             {unlocked ? (
