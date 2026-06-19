@@ -1,12 +1,11 @@
 import { createFileRoute, useParams, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Trophy,
   Plus,
   Pencil,
   Loader2,
-  Sparkles,
   UserPlus,
   Check,
   X,
@@ -16,17 +15,28 @@ import {
   Unlock,
   Trash2,
   ArrowLeft,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  TrendingUp,
+  TrendingDown,
+  Sigma,
+  Swords,
+  Gauge,
 } from "lucide-react";
 import {
   verifyLeaguePassword,
   addPlayer as addPlayerFn,
   removePlayer as removePlayerFn,
+  addRound as addRoundFn,
+  deleteRound as deleteRoundFn,
   setDrink as setDrinkFn,
   saveScores as saveScoresFn,
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { useMounted, useCountUp } from "@/hooks/use-animations";
 
 export const Route = createFileRoute("/$slug")({
   component: LeagueBoard,
@@ -37,18 +47,43 @@ type Round = { id: string; name: string; short: string; display_order: number };
 type Player = { id: string; name: string; display_order: number; drink: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
 
-const DRINKS = ["🍺", "🍷", "🧃", "🥃", "🍹", "☕"];
+const SCORE_MIN = -10;
+const SCORE_MAX = 150;
 
-function dinnerLabel(prob: number, t: Dict) {
-  if (prob >= 0.5) return { label: t.board.dinner1, emoji: "🍗" };
-  if (prob >= 0.25) return { label: t.board.dinner2, emoji: "😋" };
-  if (prob >= 0.1) return { label: t.board.dinner3, emoji: "🤞" };
-  if (prob >= 0.03) return { label: t.board.dinner4, emoji: "😬" };
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+// Small deterministic PRNG (mulberry32) so the simulation is reproducible.
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const PRIZE_EMOJIS = ["🍺", "🍷", "🧃", "☕", "🍽️", "🥇"];
+
+function dinnerLabel(prob: number, n: number, t: Dict) {
+  const fair = 1 / Math.max(n, 1);
+  if (prob >= 1) return { label: t.board.dinner1, emoji: "🍗" };
+  if (prob >= clamp(4 * fair, 0.35, 0.6)) return { label: t.board.dinner2, emoji: "😋" };
+  if (prob >= clamp(2 * fair, 0.2, 0.35)) return { label: t.board.dinner3, emoji: "🤞" };
+  if (prob >= clamp(fair, 0.08, 0.2)) return { label: t.board.dinner4, emoji: "😬" };
   return { label: t.board.dinner5, emoji: "💸" };
 }
 
 function isAuthError(err: unknown): boolean {
   return String(err instanceof Error ? err.message : err).includes("WRONG_PASSWORD");
+}
+
+function parseDraftPoints(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const num = Number(trimmed);
+  if (!Number.isFinite(num)) return null;
+  return Math.max(SCORE_MIN, Math.min(SCORE_MAX, Math.trunc(num)));
 }
 
 function LeagueBoard() {
@@ -70,6 +105,21 @@ function LeagueBoard() {
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState("");
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
+
+  // Column the standings table is sorted by. "total" | "prizes" | "dinner" | <roundId>.
+  const [sortKey, setSortKey] = useState<string>("total");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const sortBy = useCallback((key: string) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+        return key;
+      }
+      setSortDir("desc");
+      return key;
+    });
+  }, []);
 
   const unlocked = password !== null;
 
@@ -152,6 +202,26 @@ function LeagueBoard() {
     return m;
   }, [scores]);
 
+  // Briefly highlight rows whose scores just changed (live updates / edits).
+  const prevScoreRef = useRef<Map<string, number> | null>(null);
+  const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const prev = prevScoreRef.current;
+    prevScoreRef.current = scoreMap;
+    if (!prev) return; // Skip the first load — rows already animate in.
+    const changed = new Set<string>();
+    scoreMap.forEach((val, key) => {
+      if (prev.get(key) !== val) changed.add(key.slice(0, key.indexOf(":")));
+    });
+    prev.forEach((val, key) => {
+      if (!scoreMap.has(key)) changed.add(key.slice(0, key.indexOf(":")));
+    });
+    if (changed.size === 0) return;
+    setFlashIds(changed);
+    const id = setTimeout(() => setFlashIds(new Set()), 1100);
+    return () => clearTimeout(id);
+  }, [scoreMap]);
+
   const roundsPlayedIds = useMemo(
     () =>
       rounds.filter((r) => players.some((p) => scoreMap.has(`${p.id}:${r.id}`))).map((r) => r.id),
@@ -167,10 +237,10 @@ function LeagueBoard() {
         if (typeof v === "number") all.push(v);
       });
     });
-    if (!all.length) return { mean: 70, std: 15 };
+    if (!all.length) return { mean: 70, std: 35 };
     const mean = all.reduce((a, b) => a + b, 0) / all.length;
     const variance = all.reduce((a, b) => a + (b - mean) ** 2, 0) / all.length;
-    return { mean, std: Math.max(8, Math.sqrt(variance)) };
+    return { mean, std: Math.max(20, Math.sqrt(variance)) };
   }, [scoreMap, players, roundsPlayedIds]);
 
   const playerMean = useMemo(() => {
@@ -190,7 +260,7 @@ function LeagueBoard() {
     players.forEach((p) => counts.set(p.id, 0));
     if (!players.length) return counts;
 
-    const PRIOR_K = 4;
+    const PRIOR_K = 3;
 
     const currentTotals = players.map((p) => {
       let t = 0;
@@ -215,21 +285,34 @@ function LeagueBoard() {
       return counts;
     }
 
-    const TRIALS = 4000;
+    // Deterministic seed from the current data so probabilities don't flicker
+    // between renders (same inputs -> same output).
+    let seed = (0x9e3779b9 ^ roundsRemaining) >>> 0;
+    for (const c of currentTotals) {
+      seed = (Math.imul(seed, 31) + Math.round(c.total) + Math.round(c.projMean * 1000)) >>> 0;
+    }
+    const rand = mulberry32(seed);
     const randn = () => {
-      const u = Math.random() || 1e-9;
-      const v = Math.random() || 1e-9;
+      const u = rand() || 1e-9;
+      const v = rand() || 1e-9;
       return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
     };
 
-    for (let t = 0; t < TRIALS; t++) {
+    // Antithetic variates: each pair of trials reuses the negated normals to
+    // cancel sampling swings, cutting variance for roughly the same work.
+    const PAIRS = 3000;
+    const perTrial = currentTotals.length * (1 + roundsRemaining);
+    const z = new Float64Array(perTrial);
+
+    const runTrial = (sign: number) => {
       let bestId = currentTotals[0].id;
       let bestTotal = -Infinity;
+      let k = 0;
       for (const c of currentTotals) {
-        const level = c.projMean + randn() * c.skillSD;
+        const level = c.projMean + sign * z[k++] * c.skillSD;
         let sim = c.total;
         for (let r = 0; r < roundsRemaining; r++) {
-          sim += level + randn() * leagueStats.std;
+          sim += clamp(level + sign * z[k++] * leagueStats.std, SCORE_MIN, SCORE_MAX);
         }
         if (sim > bestTotal) {
           bestTotal = sim;
@@ -237,9 +320,16 @@ function LeagueBoard() {
         }
       }
       counts.set(bestId, (counts.get(bestId) ?? 0) + 1);
+    };
+
+    for (let t = 0; t < PAIRS; t++) {
+      for (let i = 0; i < perTrial; i++) z[i] = randn();
+      runTrial(1);
+      runTrial(-1);
     }
+    const samples = PAIRS * 2;
     const out = new Map<string, number>();
-    counts.forEach((v, k) => out.set(k, v / TRIALS));
+    counts.forEach((v, k) => out.set(k, v / samples));
     return out;
   }, [players, scoreMap, playerMean, leagueStats, roundsRemaining, rounds]);
 
@@ -259,9 +349,65 @@ function LeagueBoard() {
       const prob = dinnerProb.get(p.id) ?? 0;
       return { player: p, perRound, agg, wins, prob };
     });
-    rows.sort((a, b) => b.agg - a.agg);
-    return rows;
-  }, [players, scoreMap, dinnerProb, rounds]);
+
+    // League rank is always determined by total, independent of the display sort.
+    const rankMap = new Map<string, number>();
+    [...rows].sort((a, b) => b.agg - a.agg).forEach((r, i) => rankMap.set(r.player.id, i + 1));
+    const withRank = rows.map((r) => ({ ...r, rank: rankMap.get(r.player.id) ?? 0 }));
+
+    const valueFor = (row: (typeof withRank)[number]): number | null => {
+      if (sortKey === "prizes") return row.wins;
+      if (sortKey === "dinner") return row.prob;
+      if (sortKey === "total") return row.agg;
+      const idx = rounds.findIndex((r) => r.id === sortKey);
+      return idx >= 0 ? row.perRound[idx] : row.agg;
+    };
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    withRank.sort((a, b) => {
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      if (av === null && bv === null) return a.rank - b.rank;
+      if (av === null) return 1; // players without a score for this column go last
+      if (bv === null) return -1;
+      if (av === bv) return a.rank - b.rank;
+      return (av - bv) * dir;
+    });
+    return withRank;
+  }, [players, scoreMap, dinnerProb, rounds, sortKey, sortDir]);
+
+  const stats = useMemo(() => {
+    let high: { value: number; player: string; round: string } | null = null;
+    let low: { value: number; player: string; round: string } | null = null;
+    let margin: { value: number; player: string; round: string } | null = null;
+    let sum = 0;
+    let count = 0;
+    rounds.forEach((r) => {
+      const entries: { name: string; v: number }[] = [];
+      players.forEach((p) => {
+        const v = scoreMap.get(`${p.id}:${r.id}`);
+        if (typeof v !== "number") return;
+        entries.push({ name: p.name, v });
+        sum += v;
+        count += 1;
+        if (!high || v > high.value) high = { value: v, player: p.name, round: r.short };
+        if (!low || v < low.value) low = { value: v, player: p.name, round: r.short };
+      });
+      if (entries.length >= 2) {
+        entries.sort((a, b) => b.v - a.v);
+        const m = entries[0].v - entries[1].v;
+        if (!margin || m > margin.value) {
+          margin = { value: m, player: entries[0].name, round: r.short };
+        }
+      }
+    });
+    const avg = count ? sum / count : 0;
+    const totals = [...players]
+      .map((p) => rounds.reduce((a, r) => a + (scoreMap.get(`${p.id}:${r.id}`) ?? 0), 0))
+      .sort((a, b) => b - a);
+    const lead = totals.length >= 2 ? totals[0] - totals[1] : null;
+    return { high, low, margin, avg, count, lead };
+  }, [rounds, players, scoreMap]);
 
   async function addPlayer() {
     const name = newPlayerName.trim();
@@ -295,6 +441,30 @@ function LeagueBoard() {
     } catch (err) {
       if (isAuthError(err)) handleAuthFailure();
       loadAll();
+    }
+  }
+
+  async function addRound() {
+    if (!password) return;
+    try {
+      const { id } = await addRoundFn({ data: { slug, password } });
+      await loadAll();
+      setEditing(id);
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
+  async function deleteRound(roundId: string) {
+    if (!password) return;
+    const idx = rounds.findIndex((r) => r.id === roundId);
+    const fallbackId = rounds[idx + 1]?.id ?? rounds[idx - 1]?.id ?? null;
+    try {
+      await deleteRoundFn({ data: { slug, password, roundId } });
+      await loadAll();
+      setEditing(fallbackId);
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
     }
   }
 
@@ -385,16 +555,15 @@ function LeagueBoard() {
 
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-10">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-pitch mb-5">
-          <Sparkles className="size-3.5" />
+        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-pitch mb-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
           <span>{t.board.roundsPlayed(roundsPlayedCount, rounds.length)}</span>
         </div>
-        <h1 className="font-display text-5xl sm:text-6xl font-bold leading-[0.95] max-w-3xl">
+        <h1 className="font-display text-5xl sm:text-6xl font-bold leading-[0.95] max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 fill-mode-both">
           {t.board.heroTitleA}
           <br />
           <span className="text-pitch">{t.board.heroTitleB}</span>?
         </h1>
-        <p className="text-muted-foreground mt-5 max-w-xl text-lg">
+        <p className="text-muted-foreground mt-5 max-w-xl text-lg animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
           {t.board.heroSubtitle(roundsRemaining)}
         </p>
       </section>
@@ -429,6 +598,14 @@ function LeagueBoard() {
                     </button>
                   );
                 })}
+                <button
+                  onClick={addRound}
+                  className="hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
+                  title={t.board.addRound}
+                >
+                  <Plus className="size-3" />
+                  {t.board.addRound}
+                </button>
                 {rounds.length > 0 && (
                   <button
                     onClick={() =>
@@ -450,10 +627,32 @@ function LeagueBoard() {
                 <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-medium px-6 py-3 w-10">#</th>
                   <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
-                  <th className="text-left font-medium py-3">{t.board.colDrinks}</th>
+                  <th className="text-left font-medium py-3">
+                    <button
+                      type="button"
+                      onClick={() => sortBy("prizes")}
+                      title={t.board.sortBy(t.board.colRoundPrizes)}
+                      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                        sortKey === "prizes" ? "text-foreground" : ""
+                      }`}
+                    >
+                      {t.board.colRoundPrizes}
+                      <SortIcon active={sortKey === "prizes"} dir={sortDir} />
+                    </button>
+                  </th>
                   <th className="text-center font-medium py-3 hidden md:table-cell">
                     <span className="inline-flex items-center justify-center gap-1">
-                      {t.board.colDinner}
+                      <button
+                        type="button"
+                        onClick={() => sortBy("dinner")}
+                        title={t.board.sortBy(t.board.colDinner)}
+                        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                          sortKey === "dinner" ? "text-foreground" : ""
+                        }`}
+                      >
+                        {t.board.colDinner}
+                        <SortIcon active={sortKey === "dinner"} dir={sortDir} />
+                      </button>
                       <DinnerInfo />
                     </span>
                   </th>
@@ -463,28 +662,52 @@ function LeagueBoard() {
                       className="text-center font-medium py-3 px-1.5 hidden lg:table-cell"
                       title={r.name}
                     >
-                      {r.short}
+                      <button
+                        type="button"
+                        onClick={() => sortBy(r.id)}
+                        title={t.board.sortBy(r.name)}
+                        className={`inline-flex items-center gap-0.5 hover:text-foreground transition-colors ${
+                          sortKey === r.id ? "text-foreground" : ""
+                        }`}
+                      >
+                        {r.short}
+                        <SortIcon active={sortKey === r.id} dir={sortDir} />
+                      </button>
                     </th>
                   ))}
-                  <th className="text-right font-medium px-6 py-3">{t.board.colTotal}</th>
+                  <th className="text-right font-medium px-6 py-3">
+                    <button
+                      type="button"
+                      onClick={() => sortBy("total")}
+                      title={t.board.sortBy(t.board.colTotal)}
+                      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                        sortKey === "total" ? "text-foreground" : ""
+                      }`}
+                    >
+                      {t.board.colTotal}
+                      <SortIcon active={sortKey === "total"} dir={sortDir} />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {standings.map((row, i) => {
-                  const isLeader = i === 0 && row.agg > 0;
-                  const dl = dinnerLabel(row.prob, t);
+                  const isLeader = row.rank === 1 && row.agg > 0;
+                  const dl = dinnerLabel(row.prob, players.length, t);
                   return (
                     <tr
                       key={row.player.id}
-                      className="border-b border-border/30 last:border-0 hover:bg-surface-elevated/50 transition-colors"
+                      className={`border-b border-border/30 last:border-0 hover:bg-surface-elevated/50 transition-colors ${
+                        flashIds.has(row.player.id) ? "animate-row-flash" : ""
+                      }`}
                     >
                       <td className="px-6 py-4 text-muted-foreground tabular-nums align-top">
                         {isLeader ? (
                           <span className="inline-flex size-6 rounded-full gradient-pitch text-primary-foreground items-center justify-center text-xs font-bold">
-                            {i + 1}
+                            {row.rank}
                           </span>
                         ) : (
-                          <span className="text-base">{i + 1}</span>
+                          <span className="text-base">{row.rank}</span>
                         )}
                       </td>
                       <td className="py-4 align-top">
@@ -492,15 +715,6 @@ function LeagueBoard() {
                           <span className="font-display font-semibold text-base">
                             {row.player.name}
                           </span>
-                          {row.wins > 0 && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gold/15 text-[color:var(--gold)] border border-[color:var(--gold)]/30"
-                              title={t.board.winsBadgeTitle(row.wins)}
-                            >
-                              <Trophy className="size-2.5" />
-                              {t.board.winsBadgeText(row.wins)}
-                            </span>
-                          )}
                           {unlocked && (
                             <button
                               onClick={() => removePlayer(row.player.id)}
@@ -520,6 +734,7 @@ function LeagueBoard() {
                         <DrinkCell
                           player={row.player}
                           wins={row.wins}
+                          openUp={i >= standings.length - 3}
                           editable={unlocked}
                           open={drinkPickerFor === row.player.id}
                           onToggle={() =>
@@ -577,6 +792,60 @@ function LeagueBoard() {
           </div>
         </div>
 
+        {stats.count > 0 && (
+          <div className="mt-6 grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <StatCard
+              icon={<TrendingUp className="size-4" />}
+              tone="up"
+              label={t.board.statsHighest}
+              num={stats.high ? stats.high.value : null}
+              caption={stats.high ? `${stats.high.player} · ${stats.high.round}` : ""}
+              delay={0}
+            />
+            <StatCard
+              icon={<TrendingDown className="size-4" />}
+              tone="down"
+              label={t.board.statsLowest}
+              num={stats.low ? stats.low.value : null}
+              caption={stats.low ? `${stats.low.player} · ${stats.low.round}` : ""}
+              delay={60}
+            />
+            <StatCard
+              icon={<Sigma className="size-4" />}
+              tone="neutral"
+              label={t.board.statsAverage}
+              num={stats.avg}
+              decimals={1}
+              caption={t.board.statsAcross(stats.count)}
+              delay={120}
+            />
+            <StatCard
+              icon={<Swords className="size-4" />}
+              tone="up"
+              label={t.board.statsRoundMargin}
+              num={stats.margin ? stats.margin.value : null}
+              prefix="+"
+              caption={stats.margin ? `${stats.margin.player} · ${stats.margin.round}` : ""}
+              delay={180}
+            />
+            <StatCard
+              icon={<Gauge className="size-4" />}
+              tone="neutral"
+              label={t.board.statsLead}
+              num={stats.lead}
+              prefix="+"
+              caption={
+                stats.lead === null
+                  ? ""
+                  : stats.lead === 0
+                    ? t.board.statsTied
+                    : t.board.statsLeadBy(standings.find((r) => r.rank === 1)?.player.name ?? "")
+              }
+              delay={240}
+            />
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground/60 mt-6 text-center">{t.board.footer}</p>
       </section>
 
@@ -590,6 +859,8 @@ function LeagueBoard() {
           scoreMap={scoreMap}
           onAuthFailure={handleAuthFailure}
           onClose={() => setEditing(null)}
+          onAddRound={addRound}
+          onDeleteRound={deleteRound}
           onSaved={() => loadAll()}
         />
       )}
@@ -639,23 +910,23 @@ function PasswordModal({
 }) {
   const [value, setValue] = useState("");
   const [checking, setChecking] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"wrong" | "server" | null>(null);
   const t = useT();
 
   async function submit() {
     const pw = value.trim();
     if (!pw) return;
     setChecking(true);
-    setError(false);
+    setError(null);
     try {
-      const { ok } = await verifyLeaguePassword({ data: { slug, password: pw } });
+      const { ok, reason } = await verifyLeaguePassword({ data: { slug, password: pw } });
       if (ok) {
         onSuccess(pw);
       } else {
-        setError(true);
+        setError(reason === "WRONG_PASSWORD" ? "wrong" : "server");
       }
     } catch {
-      setError(true);
+      setError("server");
     } finally {
       setChecking(false);
     }
@@ -672,15 +943,18 @@ function PasswordModal({
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
-            setError(false);
+            setError(null);
           }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder={t.board.passwordPlaceholder}
           className="w-full bg-input border border-border rounded-lg pl-9 pr-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 font-mono tracking-wide"
         />
       </div>
-      {error && (
+      {error === "wrong" && (
         <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-2">{t.board.passwordWrong}</p>
+      )}
+      {error === "server" && (
+        <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-2">{t.board.passwordCheckFailed}</p>
       )}
       <div className="flex justify-end gap-2 mt-5">
         <button
@@ -692,7 +966,7 @@ function PasswordModal({
         <button
           onClick={submit}
           disabled={checking}
-          className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50"
+          className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
         >
           {checking ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
           {t.board.unlock}
@@ -705,6 +979,7 @@ function PasswordModal({
 function DrinkCell({
   player,
   wins,
+  openUp,
   editable,
   open,
   onToggle,
@@ -712,13 +987,15 @@ function DrinkCell({
 }: {
   player: Player;
   wins: number;
+  openUp: boolean;
   editable: boolean;
   open: boolean;
   onToggle: () => void;
   onPick: (d: string) => void;
 }) {
   const t = useT();
-  const drink = player.drink || "🍺";
+  const drink = player.drink || "🥇";
+
   if (!editable) {
     return (
       <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated">
@@ -732,7 +1009,7 @@ function DrinkCell({
       <button
         onClick={onToggle}
         className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-accent transition-colors"
-        title={t.board.changeDrink}
+        title={t.board.changeRoundPrizeEmoji}
       >
         <span className="text-lg leading-none">{drink}</span>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
@@ -745,8 +1022,12 @@ function DrinkCell({
             className="fixed inset-0 z-30"
             onClick={onToggle}
           />
-          <div className="absolute z-40 mt-2 left-0 bg-surface border border-border rounded-xl shadow-card p-2 flex gap-1">
-            {DRINKS.map((d) => (
+          <div
+            className={`absolute z-40 left-0 bg-surface border border-border rounded-xl shadow-card p-2 flex gap-1 ${
+              openUp ? "bottom-full mb-2" : "top-full mt-2"
+            }`}
+          >
+            {PRIZE_EMOJIS.map((d) => (
               <button
                 key={d}
                 onClick={() => onPick(d)}
@@ -850,8 +1131,58 @@ function DinnerInfo() {
   );
 }
 
+function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
+  if (!active) return <ChevronsUpDown className="size-3 opacity-40" />;
+  return dir === "desc" ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />;
+}
+
+function StatCard({
+  icon,
+  tone,
+  label,
+  value,
+  caption,
+  num = null,
+  prefix = "",
+  decimals = 0,
+  delay = 0,
+}: {
+  icon: React.ReactNode;
+  tone: "up" | "down" | "neutral";
+  label: string;
+  value?: string;
+  caption: string;
+  num?: number | null;
+  prefix?: string;
+  decimals?: number;
+  delay?: number;
+}) {
+  const animated = useCountUp(num ?? 0, num !== null);
+  const toneClass =
+    tone === "up"
+      ? "bg-pitch/15 text-pitch"
+      : tone === "down"
+        ? "bg-[color:oklch(0.62_0.24_18)]/15 text-[color:oklch(0.7_0.2_25)]"
+        : "bg-surface-elevated text-muted-foreground";
+  const display = num !== null ? `${prefix}${animated.toFixed(decimals)}` : (value ?? "—");
+  return (
+    <div
+      style={{ animationDelay: `${delay}ms`, animationDuration: "600ms" }}
+      className="bg-surface/60 backdrop-blur border border-border rounded-xl p-4 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
+    >
+      <div className="flex items-center gap-2">
+        <span className={`grid place-items-center size-7 rounded-lg ${toneClass}`}>{icon}</span>
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      </div>
+      <div className="font-display font-bold text-2xl tabular-nums leading-none">{display}</div>
+      {caption && <div className="text-xs text-muted-foreground truncate">{caption}</div>}
+    </div>
+  );
+}
+
 function DinnerBar({ prob, label, emoji }: { prob: number; label: string; emoji: string }) {
   const pct = Math.round(prob * 100);
+  const mounted = useMounted();
   return (
     <div className="px-3 min-w-[150px]">
       <div className="flex items-center justify-between text-xs mb-1">
@@ -863,9 +1194,9 @@ function DinnerBar({ prob, label, emoji }: { prob: number; label: string; emoji:
       </div>
       <div className="h-1.5 rounded-full bg-surface-elevated overflow-hidden">
         <div
-          className="h-full rounded-full transition-all"
+          className="h-full rounded-full transition-all duration-700 ease-out"
           style={{
-            width: `${Math.max(2, pct)}%`,
+            width: mounted ? `${Math.max(2, pct)}%` : "0%",
             background:
               prob >= 0.4
                 ? "linear-gradient(90deg, oklch(0.84 0.18 168), oklch(0.6 0.23 262))"
@@ -921,6 +1252,8 @@ function RoundEditor({
   scoreMap,
   onAuthFailure,
   onClose,
+  onAddRound,
+  onDeleteRound,
   onSaved,
 }: {
   slug: string;
@@ -931,12 +1264,20 @@ function RoundEditor({
   scoreMap: Map<string, number>;
   onAuthFailure: () => void;
   onClose: () => void;
+  onAddRound: () => Promise<void>;
+  onDeleteRound: (roundId: string) => Promise<void>;
   onSaved: () => void;
 }) {
   const [currentId, setCurrentId] = useState(roundId);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [addingRound, setAddingRound] = useState(false);
+  const [deletingRound, setDeletingRound] = useState(false);
   const t = useT();
+
+  useEffect(() => {
+    setCurrentId(roundId);
+  }, [roundId]);
 
   useEffect(() => {
     const d: Record<string, string> = {};
@@ -949,12 +1290,33 @@ function RoundEditor({
 
   const round = rounds.find((r) => r.id === currentId);
 
+  async function addRound() {
+    setAddingRound(true);
+    try {
+      await onAddRound();
+    } finally {
+      setAddingRound(false);
+    }
+  }
+
+  async function deleteRound() {
+    if (!round || rounds.length <= 1) return;
+    const confirmed = window.confirm(t.board.deleteRoundConfirm(round.name));
+    if (!confirmed) return;
+    setDeletingRound(true);
+    try {
+      await onDeleteRound(round.id);
+    } finally {
+      setDeletingRound(false);
+    }
+  }
+
   async function save() {
     if (!round) return;
     setSaving(true);
     const entries = players.map((p) => ({
       playerId: p.id,
-      points: draft[p.id] === "" ? null : parseInt(draft[p.id], 10),
+      points: parseDraftPoints(draft[p.id] ?? ""),
     }));
     try {
       await saveScoresFn({ data: { slug, password, roundId: currentId, entries } });
@@ -989,9 +1351,35 @@ function RoundEditor({
               </div>
               <h3 className="font-display text-2xl font-bold">{round.name}</h3>
             </div>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-              <X className="size-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={addRound}
+                disabled={addingRound}
+                className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-50"
+                title={t.board.addRound}
+              >
+                {addingRound ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Plus className="size-4" />
+                )}
+              </button>
+              <button
+                onClick={deleteRound}
+                disabled={deletingRound || rounds.length <= 1}
+                className="text-muted-foreground hover:text-[color:oklch(0.7_0.2_25)] p-1 disabled:opacity-30"
+                title={t.board.deleteRound}
+              >
+                {deletingRound ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+              </button>
+              <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
           <div className="flex gap-1.5 mt-4 flex-wrap">
             {rounds.map((r) => (
@@ -1012,7 +1400,7 @@ function RoundEditor({
         </div>
 
         <div className="px-6 py-4 max-h-[50vh] overflow-y-auto">
-          <div className="grid grid-cols-[1fr_120px] gap-x-4 gap-y-2 items-center">
+          <div className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-4 gap-y-2 items-center">
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
               {t.board.colPlayer}
             </div>
@@ -1040,7 +1428,7 @@ function RoundEditor({
           <button
             onClick={save}
             disabled={saving}
-            className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 inline-flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
             {t.common.save}
@@ -1060,17 +1448,46 @@ function RowInput({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useT();
+  const numeric = parseDraftPoints(value);
+  const sliderValue = numeric ?? 0;
+
   return (
     <>
       <div className="font-display text-sm font-medium py-1.5">{name}</div>
-      <input
-        type="number"
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="—"
-        className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-full"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={SCORE_MIN}
+          max={SCORE_MAX}
+          step={1}
+          value={sliderValue}
+          onChange={(e) => onChange(e.currentTarget.value)}
+          className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)]"
+          aria-label={name}
+        />
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => {
+            const next = parseDraftPoints(e.target.value);
+            if (next === null && e.target.value.trim() !== "") return;
+            onChange(next === null ? "" : String(next));
+          }}
+          placeholder="0"
+          className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16"
+        />
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="px-2 py-1 text-[11px] rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground"
+          title={t.board.clearScore}
+        >
+          <X className="size-3" />
+        </button>
+      </div>
     </>
   );
 }

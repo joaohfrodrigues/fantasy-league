@@ -187,3 +187,19 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Transient highlight applied to a standings row when its score changes live. */
+@keyframes row-flash {
+  0% {
+    background-color: oklch(0.84 0.18 168 / 22%);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-row-flash {
+    animation: row-flash 1.1s ease-out;
+  }
+}

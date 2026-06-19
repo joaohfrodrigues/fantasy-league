@@ -5,17 +5,30 @@ import {
   Plus,
   X,
   Loader2,
-  Sparkles,
   Copy,
   Check,
   ArrowRight,
   KeyRound,
+  LineChart,
+  History,
 } from "lucide-react";
 import { createLeague, type CreateLeagueResult } from "@/lib/leagues.functions";
+import {
+  buildTemplateRounds,
+  TEMPLATE_IDS,
+  type TemplateId,
+  LEAGUE_MIN_ROUNDS,
+  LEAGUE_MAX_ROUNDS,
+  LEAGUE_DEFAULT_ROUNDS,
+  KNOCKOUT_MIN_DEPTH,
+  KNOCKOUT_MAX_DEPTH,
+  KNOCKOUT_DEFAULT_DEPTH,
+} from "@/lib/templates";
 import { getRecentLeagues, removeRecentLeague, type RecentLeague } from "@/lib/recent-leagues";
 import { useT, getDict, type Locale } from "@/lib/i18n";
 import { resolveLocale } from "@/lib/locale.functions";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { ExampleBoard } from "@/components/ExampleBoard";
 
 export const Route = createFileRoute("/")({
   loader: async (): Promise<{ locale: Locale }> => ({ locale: await resolveLocale() }),
@@ -34,6 +47,8 @@ export const Route = createFileRoute("/")({
 });
 
 const DEFAULT_PLAYERS = ["", ""];
+const MIN_PASSWORD = 4;
+const MAX_PASSWORD = 8;
 
 function slugFromInput(raw: string): string {
   const v = raw.trim();
@@ -58,11 +73,14 @@ function Landing() {
   const t = useT();
   const [name, setName] = useState("");
   const [players, setPlayers] = useState<string[]>(DEFAULT_PLAYERS);
-  const [rounds, setRounds] = useState<string[]>(() => [...t.landing.defaultRounds]);
+  const [templateId, setTemplateId] = useState<TemplateId>("worldCup");
+  const [leagueRounds, setLeagueRounds] = useState<number>(LEAGUE_DEFAULT_ROUNDS);
+  const [knockoutDepth, setKnockoutDepth] = useState<number>(KNOCKOUT_DEFAULT_DEPTH);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreateLeagueResult | null>(null);
   const [openCode, setOpenCode] = useState("");
+  const [password, setPassword] = useState("");
 
   function updateAt(list: string[], idx: number, value: string) {
     return list.map((v, i) => (i === idx ? value : v));
@@ -72,7 +90,7 @@ function Landing() {
     setError(null);
     const cleanName = name.trim();
     const cleanPlayers = players.map((p) => p.trim()).filter(Boolean);
-    const cleanRounds = rounds.map((r) => r.trim()).filter(Boolean);
+    const cleanRounds = buildTemplateRounds(templateId, t, { leagueRounds, knockoutDepth });
     if (!cleanName) {
       setError(t.landing.errNoName);
       return;
@@ -85,16 +103,29 @@ function Landing() {
       setError(t.landing.errRounds);
       return;
     }
+    if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD)) {
+      setError(t.landing.errPasswordLength);
+      return;
+    }
 
     setCreating(true);
     try {
       const result = await createLeague({
-        data: { name: cleanName, playerNames: cleanPlayers, roundNames: cleanRounds },
+        data: {
+          name: cleanName,
+          playerNames: cleanPlayers,
+          rounds: cleanRounds,
+          password: password || undefined,
+        },
       });
       setCreated(result);
     } catch (err) {
       console.error("createLeague failed:", err);
-      setError(t.landing.errCreate);
+      if (err instanceof Error && err.message === "INVALID_PASSWORD") {
+        setError(t.landing.errPasswordLength);
+      } else {
+        setError(t.landing.errCreate);
+      }
     } finally {
       setCreating(false);
     }
@@ -127,16 +158,71 @@ function Landing() {
       </header>
 
       <section className="max-w-5xl mx-auto px-6 pt-16 pb-10">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-pitch mb-5">
-          <Sparkles className="size-3.5" />
+        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-pitch mb-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
           <span>{t.landing.heroEyebrow}</span>
         </div>
-        <h1 className="font-display text-5xl sm:text-7xl font-bold leading-[0.95] max-w-3xl">
+        <h1 className="font-display text-5xl sm:text-7xl font-bold leading-[0.95] max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 fill-mode-both">
           {t.landing.heroTitleA}
           <br />
           <span className="text-pitch">{t.landing.heroTitleB}</span>
         </h1>
-        <p className="text-muted-foreground mt-5 max-w-xl text-lg">{t.landing.heroSubtitle}</p>
+        <p className="text-muted-foreground mt-5 max-w-xl text-lg animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
+          {t.landing.heroSubtitle}
+        </p>
+        <div className="mt-10 flex justify-center animate-in fade-in slide-in-from-top-6 duration-700 delay-[450ms] fill-mode-both">
+          <a
+            href="#create-tracker"
+            onClick={(e) => {
+              e.preventDefault();
+              document
+                .getElementById("create-tracker")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-pitch px-8 py-4 text-base font-semibold text-pitch-foreground shadow-glow transition-transform hover:scale-[1.03] active:scale-95"
+          >
+            {t.landing.heroCta}
+          </a>
+        </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-6 pb-12">
+        <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-5">
+          {t.landing.features.title}
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FeatureCard
+            icon={<LineChart className="size-4" />}
+            title={t.landing.features.simulateTitle}
+            desc={t.landing.features.simulateDesc}
+            delay={0}
+          />
+          <FeatureCard
+            icon={<Trophy className="size-4" />}
+            title={t.landing.features.prizesTitle}
+            desc={t.landing.features.prizesDesc}
+            delay={100}
+          />
+          <FeatureCard
+            icon={<History className="size-4" />}
+            title={t.landing.features.historyTitle}
+            desc={t.landing.features.historyDesc}
+            delay={200}
+          />
+        </div>
+      </section>
+
+      <ExampleBoard />
+
+      <section className="max-w-5xl mx-auto px-6 pt-4 pb-2" id="create-tracker">
+        <div className="scroll-mt-24">
+          <div className="text-xs uppercase tracking-[0.2em] text-pitch mb-3">
+            {t.landing.setupEyebrow}
+          </div>
+          <h2 className="font-display text-3xl sm:text-4xl font-bold leading-tight">
+            {t.landing.setupTitle}
+          </h2>
+          <p className="text-muted-foreground mt-3 max-w-xl">{t.landing.setupSubtitle}</p>
+        </div>
       </section>
 
       <section className="max-w-5xl mx-auto px-6 pb-24 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -155,6 +241,19 @@ function Landing() {
             className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 mb-6"
           />
 
+          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
+            {t.landing.createPasswordLabel}
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t.landing.createPasswordPlaceholder}
+            maxLength={MAX_PASSWORD}
+            className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+          />
+          <p className="text-xs text-muted-foreground mt-2 mb-6">{t.landing.createPasswordHelp}</p>
+
           <EditableList
             title={t.landing.playersTitle}
             items={players}
@@ -167,14 +266,13 @@ function Landing() {
 
           <div className="h-5" />
 
-          <EditableList
-            title={t.landing.roundsTitle}
-            items={rounds}
-            placeholder={(i) => t.landing.roundPlaceholder(i)}
-            onChange={(i, v) => setRounds((l) => updateAt(l, i, v))}
-            onAdd={() => setRounds((l) => [...l, ""])}
-            onRemove={(i) => setRounds((l) => l.filter((_, idx) => idx !== i))}
-            minItems={1}
+          <TemplateSelector
+            templateId={templateId}
+            onSelect={setTemplateId}
+            leagueRounds={leagueRounds}
+            onLeagueRounds={setLeagueRounds}
+            knockoutDepth={knockoutDepth}
+            onKnockoutDepth={setKnockoutDepth}
           />
 
           {error && <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-5">{error}</p>}
@@ -182,13 +280,9 @@ function Landing() {
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="mt-6 w-full px-5 py-3 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 inline-flex items-center justify-center gap-2 disabled:opacity-50"
+            className="mt-6 w-full px-5 py-3 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100"
           >
-            {creating ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
+            {creating && <Loader2 className="size-4 animate-spin" />}
             {t.landing.createButton}
           </button>
         </div>
@@ -228,6 +322,31 @@ function Landing() {
   );
 }
 
+function FeatureCard({
+  icon,
+  title,
+  desc,
+  delay = 0,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  delay?: number;
+}) {
+  return (
+    <div
+      style={{ animationDelay: `${delay}ms`, animationDuration: "700ms" }}
+      className="bg-surface/60 backdrop-blur border border-border rounded-2xl p-5 transition hover:-translate-y-0.5 hover:border-pitch/40 animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
+    >
+      <div className="size-9 rounded-lg bg-pitch/15 text-pitch grid place-items-center mb-3">
+        {icon}
+      </div>
+      <h3 className="font-display font-semibold text-sm mb-1">{title}</h3>
+      <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+    </div>
+  );
+}
+
 function RecentLeagues() {
   const t = useT();
   const [leagues, setLeagues] = useState<RecentLeague[]>([]);
@@ -248,8 +367,12 @@ function RecentLeagues() {
       <h3 className="font-display text-sm font-semibold mb-0.5">{t.landing.recentTitle}</h3>
       <p className="text-[11px] text-muted-foreground mb-3">{t.landing.recentSubtitle}</p>
       <ul className="space-y-1.5">
-        {leagues.map((lg) => (
-          <li key={lg.slug} className="group flex items-center gap-1">
+        {leagues.map((lg, i) => (
+          <li
+            key={lg.slug}
+            style={{ animationDelay: `${Math.min(i, 8) * 50}ms`, animationDuration: "500ms" }}
+            className="group flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+          >
             <Link
               to="/$slug"
               params={{ slug: lg.slug }}
@@ -273,6 +396,118 @@ function RecentLeagues() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function TemplateSelector({
+  templateId,
+  onSelect,
+  leagueRounds,
+  onLeagueRounds,
+  knockoutDepth,
+  onKnockoutDepth,
+}: {
+  templateId: TemplateId;
+  onSelect: (id: TemplateId) => void;
+  leagueRounds: number;
+  onLeagueRounds: (n: number) => void;
+  knockoutDepth: number;
+  onKnockoutDepth: (n: number) => void;
+}) {
+  const t = useT();
+  const meta = t.landing.templates;
+  const preview = buildTemplateRounds(templateId, t, { leagueRounds, knockoutDepth });
+
+  return (
+    <div>
+      <label className="block text-[11px] uppercase tracking-wider text-muted-foreground">
+        {meta.title}
+      </label>
+      <p className="text-xs text-muted-foreground mt-1 mb-2.5">{meta.subtitle}</p>
+
+      <div className="grid grid-cols-2 gap-2">
+        {TEMPLATE_IDS.map((id) => {
+          const selected = id === templateId;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              aria-pressed={selected}
+              className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                selected
+                  ? "border-pitch bg-pitch/10 ring-2 ring-pitch/20"
+                  : "border-border bg-input hover:bg-accent"
+              }`}
+            >
+              <div className="text-sm font-medium">{meta[id].label}</div>
+              <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                {meta[id].desc}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {templateId === "league" && (
+        <TemplateSizeField
+          label={meta.leagueRoundsLabel}
+          value={leagueRounds}
+          min={LEAGUE_MIN_ROUNDS}
+          max={LEAGUE_MAX_ROUNDS}
+          onChange={onLeagueRounds}
+        />
+      )}
+      {templateId === "knockout" && (
+        <TemplateSizeField
+          label={meta.knockoutDepthLabel}
+          value={knockoutDepth}
+          min={KNOCKOUT_MIN_DEPTH}
+          max={KNOCKOUT_MAX_DEPTH}
+          onChange={onKnockoutDepth}
+        />
+      )}
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        <span className="uppercase tracking-wider">{meta.previewLabel}</span>{" "}
+        <span className="text-foreground/70">({preview.length})</span>{" "}
+        <span className="font-mono">{preview.map((r) => r.short).join(" · ")}</span>
+      </p>
+    </div>
+  );
+}
+
+function TemplateSizeField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (n: number) => void;
+}) {
+  function commit(raw: string) {
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n)) return;
+    onChange(Math.min(max, Math.max(min, n)));
+  }
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <label className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</label>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => commit(e.target.value)}
+        className="w-20 bg-input border border-border rounded-lg px-3 py-2 text-sm text-center outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+      />
     </div>
   );
 }
@@ -349,7 +584,9 @@ function CreatedModal({ result, onClose }: { result: CreateLeagueResult; onClose
         </div>
         <p className="text-sm text-muted-foreground mb-5">
           <span className="text-foreground font-medium">{result.name}</span>{" "}
-          {t.landing.createdReady}
+          {result.generatedPassword
+            ? t.landing.createdReadyGenerated
+            : t.landing.createdReadyChosen}
         </p>
 
         <CopyField
@@ -358,23 +595,33 @@ function CreatedModal({ result, onClose }: { result: CreateLeagueResult; onClose
           icon={<ArrowRight className="size-3.5" />}
         />
         <div className="h-3" />
-        <CopyField
-          label={t.landing.passwordLabel}
-          value={result.password}
-          icon={<KeyRound className="size-3.5" />}
-          mono
-        />
-
-        <div className="mt-5 rounded-lg bg-surface-elevated/50 border border-border/60 px-3 py-2.5">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            <span className="text-foreground font-medium">{t.landing.importantLabel}</span>{" "}
-            {t.landing.importantBody}
-          </p>
-        </div>
+        {result.generatedPassword ? (
+          <>
+            <CopyField
+              label={t.landing.passwordLabel}
+              value={result.password}
+              icon={<KeyRound className="size-3.5" />}
+              mono
+            />
+            <div className="mt-5 rounded-lg bg-surface-elevated/50 border border-border/60 px-3 py-2.5">
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                <span className="text-foreground font-medium">{t.landing.importantLabel}</span>{" "}
+                {t.landing.importantBody}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 rounded-lg bg-surface-elevated/50 border border-border/60 px-3 py-2.5">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <span className="text-foreground font-medium">{t.landing.passwordChosenLabel}</span>{" "}
+              {t.landing.passwordChosenBody}
+            </p>
+          </div>
+        )}
 
         <button
           onClick={onClose}
-          className="mt-5 w-full px-5 py-3 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 inline-flex items-center justify-center gap-2"
+          className="mt-5 w-full px-5 py-3 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center justify-center gap-2"
         >
           {t.landing.goToLeague} <ArrowRight className="size-4" />
         </button>
@@ -420,10 +667,14 @@ function CopyField({
         />
         <button
           onClick={copy}
-          className="px-3 rounded-lg bg-surface-elevated hover:bg-accent transition-colors inline-flex items-center"
+          className="px-3 rounded-lg bg-surface-elevated hover:bg-accent active:scale-95 transition inline-flex items-center"
           aria-label={t.common.copy}
         >
-          {copied ? <Check className="size-4 text-pitch" /> : <Copy className="size-4" />}
+          {copied ? (
+            <Check className="size-4 text-pitch animate-in zoom-in-50 duration-300" />
+          ) : (
+            <Copy className="size-4" />
+          )}
         </button>
       </div>
     </div>
