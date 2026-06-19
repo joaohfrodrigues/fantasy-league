@@ -15,7 +15,7 @@ export const pt = {
   },
 
   root: {
-    metaTitle: "Fantasy League Tracker",
+    metaTitle: "Fantasy Tracker",
     metaDescription:
       "Acompanha as tuas ligas fantasy ronda a ronda — vencedores, prémios, probabilidades ao vivo e o histórico das tuas ligas.",
     notFoundTitle: "Página não encontrada",
@@ -29,7 +29,7 @@ export const pt = {
   },
 
   landing: {
-    metaTitle: "Fantasy League Tracker",
+    metaTitle: "Fantasy Tracker",
     metaDescription:
       "Acompanha as tuas ligas fantasy. Probabilidades ao vivo, prémios por ronda e o histórico das tuas ligas.",
     brandSubtitle: "Acompanha as tuas ligas fantasy · Partilha o link · Vê quem ganha o prémio",

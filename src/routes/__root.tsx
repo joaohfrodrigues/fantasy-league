@@ -90,12 +90,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { property: "og:description", content: t.root.metaDescription },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },
+        { name: "theme-color", content: "#101327" },
       ],
       links: [
         {
           rel: "stylesheet",
           href: appCss,
         },
+        { rel: "icon", type: "image/png", sizes: "192x192", href: "/icons/icon-192.png" },
+        { rel: "icon", type: "image/png", sizes: "512x512", href: "/icons/icon-512.png" },
+        { rel: "apple-touch-icon", sizes: "192x192", href: "/icons/icon-192.png" },
+        { rel: "manifest", href: "/manifest.webmanifest" },
       ],
     };
   },

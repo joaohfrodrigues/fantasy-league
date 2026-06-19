@@ -15,7 +15,7 @@ export const en: Dict = {
   },
 
   root: {
-    metaTitle: "Fantasy League Tracker",
+    metaTitle: "Fantasy Tracker",
     metaDescription:
       "Track your fantasy leagues round by round — winners, prizes, live odds and your league history.",
     notFoundTitle: "Page not found",
@@ -29,10 +29,10 @@ export const en: Dict = {
   },
 
   landing: {
-    metaTitle: "Fantasy League Tracker",
+    metaTitle: "Fantasy Tracker",
     metaDescription: "Track your fantasy leagues. Live odds, round prizes and your league history.",
     brandSubtitle: "Track your fantasy leagues · Share the link · See who wins the prize",
-    heroEyebrow: "Fantasy league tracker",
+    heroEyebrow: "Fantasy Tracker",
     heroTitleA: "Create your league tracker",
     heroTitleB: "and see who gets dinner for free",
     heroSubtitle:

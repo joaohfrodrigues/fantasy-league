@@ -16,7 +16,8 @@ function pickFromAcceptLanguage(header: string | null | undefined): Locale | nul
 
 /**
  * Resolves the active locale on the server: cookie first, then the
- * Accept-Language header, defaulting to Portuguese.
+ * Accept-Language header, defaulting to English when neither Portuguese
+ * nor English is requested.
  */
 export const resolveLocale = createServerFn({ method: "GET" }).handler(
   async (): Promise<Locale> => {
@@ -27,6 +28,6 @@ export const resolveLocale = createServerFn({ method: "GET" }).handler(
 
     const headers = getRequestHeaders();
     const accept = headers.get("accept-language");
-    return pickFromAcceptLanguage(accept) ?? "pt";
+    return pickFromAcceptLanguage(accept) ?? "en";
   },
 );
