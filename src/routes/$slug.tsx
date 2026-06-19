@@ -53,6 +53,7 @@ import {
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const Route = createFileRoute("/$slug")({
   component: LeagueBoard,
@@ -525,7 +526,14 @@ function LeagueBoard() {
       .map((p) => rounds.reduce((a, r) => a + (simMap.get(`${p.id}:${r.id}`) ?? 0), 0))
       .sort((a, b) => b - a);
     const lead = totals.length >= 2 ? totals[0] - totals[1] : null;
-    return { high, low, margin, avg, count, lead };
+    return { high, low, margin, avg, count, lead } as {
+      high: { value: number; player: string; round: string } | null;
+      low: { value: number; player: string; round: string } | null;
+      margin: { value: number; player: string; round: string } | null;
+      avg: number;
+      count: number;
+      lead: number | null;
+    };
   }, [rounds, players, simMap]);
 
   async function addPlayer() {
@@ -1186,7 +1194,7 @@ function LeagueBoard() {
                         {t.board.colDinner}
                         <SortIcon active={sortKey === "dinner"} dir={sortDir} />
                       </button>
-                      <DinnerInfo />
+                      <WinOddsInfo />
                     </span>
                   </th>
                   {rounds.map((r) => (
@@ -1651,9 +1659,92 @@ function DrinkCell({
   );
 }
 
-function DinnerInfo() {
+function WinOddsInfo() {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const t = useT();
+
+  const panelBody = (
+    <>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
+        <span className="grid place-items-center size-7 rounded-lg bg-pitch/15 text-pitch">
+          <Trophy className="size-3.5" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
+            {t.board.infoTitle}
+          </p>
+          <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
+            {t.board.infoSubtitle}
+          </p>
+        </div>
+      </div>
+
+      <ol className="px-4 py-3 space-y-3">
+        <li className="flex gap-3">
+          <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
+            1
+          </span>
+          <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+            {t.board.infoStep1a}{" "}
+            <span className="text-foreground font-medium">{t.board.infoStep1bold}</span>{" "}
+            {t.board.infoStep1c}
+          </p>
+        </li>
+        <li className="flex gap-3">
+          <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
+            2
+          </span>
+          <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+            {t.board.infoStep2a}{" "}
+            <span className="text-foreground font-medium">{t.board.infoStep2bold}</span>
+            {t.board.infoStep2c}
+          </p>
+        </li>
+        <li className="flex gap-3">
+          <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
+            3
+          </span>
+          <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+            {t.board.infoStep3a}{" "}
+            <span className="text-foreground font-medium">{t.board.infoStep3bold}</span>{" "}
+            {t.board.infoStep3c}
+          </p>
+        </li>
+      </ol>
+
+      <div className="px-4 py-3 border-t border-border/60 bg-surface-elevated/30 space-y-1.5">
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.infoFaq1bold}</span>{" "}
+          {t.board.infoFaq1}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.infoFaq2bold}</span>{" "}
+          {t.board.infoFaq2}
+        </p>
+      </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+            aria-label={t.board.infoTitle}
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        </DrawerTrigger>
+        <DrawerContent className="text-left overflow-hidden">
+          <div className="pb-6">{panelBody}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <span className="relative inline-flex normal-case">
       <button
@@ -1673,63 +1764,7 @@ function DinnerInfo() {
             onClick={() => setOpen(false)}
           />
           <div className="absolute z-40 top-7 left-1/2 -translate-x-1/2 w-[min(92vw,26rem)] bg-surface border border-border rounded-2xl shadow-card overflow-hidden text-left">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
-              <span className="grid place-items-center size-7 rounded-lg bg-pitch/15 text-pitch">
-                <Trophy className="size-3.5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
-                  {t.board.infoTitle}
-                </p>
-                <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
-                  {t.board.infoSubtitle}
-                </p>
-              </div>
-            </div>
-
-            <ol className="px-4 py-3 space-y-3">
-              <li className="flex gap-3">
-                <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
-                  1
-                </span>
-                <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                  {t.board.infoStep1a}{" "}
-                  <span className="text-foreground font-medium">{t.board.infoStep1bold}</span>{" "}
-                  {t.board.infoStep1c}
-                </p>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
-                  2
-                </span>
-                <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                  {t.board.infoStep2a}{" "}
-                  <span className="text-foreground font-medium">{t.board.infoStep2bold}</span>
-                  {t.board.infoStep2c}
-                </p>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 grid place-items-center size-5 shrink-0 rounded-full bg-pitch/15 text-pitch text-[11px] font-bold tabular-nums">
-                  3
-                </span>
-                <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                  {t.board.infoStep3a}{" "}
-                  <span className="text-foreground font-medium">{t.board.infoStep3bold}</span>{" "}
-                  {t.board.infoStep3c}
-                </p>
-              </li>
-            </ol>
-
-            <div className="px-4 py-3 border-t border-border/60 bg-surface-elevated/30 space-y-1.5">
-              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                <span className="text-foreground font-medium">{t.board.infoFaq1bold}</span>{" "}
-                {t.board.infoFaq1}
-              </p>
-              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                <span className="text-foreground font-medium">{t.board.infoFaq2bold}</span>{" "}
-                {t.board.infoFaq2}
-              </p>
-            </div>
+            {panelBody}
           </div>
         </>
       )}
@@ -1739,7 +1774,61 @@ function DinnerInfo() {
 
 function TiebreakInfo() {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const t = useT();
+
+  const panelBody = (
+    <>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
+        <span className="grid place-items-center size-7 rounded-lg bg-pitch/15 text-pitch">
+          <Scale className="size-3.5" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
+            {t.board.tiebreakInfoTitle}
+          </p>
+          <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
+            {t.board.tiebreakInfoSubtitle}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-4 py-3 space-y-2.5">
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.tiebreakTotal}</span>{" "}
+          {t.board.tiebreakInfoTotal}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.tiebreakWins}</span>{" "}
+          {t.board.tiebreakInfoWins}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.tiebreakLatest}</span>{" "}
+          {t.board.tiebreakInfoLatest}
+        </p>
+      </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+            aria-label={t.board.tiebreakInfoTitle}
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        </DrawerTrigger>
+        <DrawerContent className="text-left overflow-hidden">
+          <div className="pb-6">{panelBody}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <span className="relative inline-flex normal-case">
       <button
@@ -1759,34 +1848,7 @@ function TiebreakInfo() {
             onClick={() => setOpen(false)}
           />
           <div className="absolute z-40 top-7 left-1/2 -translate-x-1/2 w-[min(92vw,24rem)] bg-surface border border-border rounded-2xl shadow-card overflow-hidden text-left">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
-              <span className="grid place-items-center size-7 rounded-lg bg-pitch/15 text-pitch">
-                <Scale className="size-3.5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
-                  {t.board.tiebreakInfoTitle}
-                </p>
-                <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
-                  {t.board.tiebreakInfoSubtitle}
-                </p>
-              </div>
-            </div>
-
-            <div className="px-4 py-3 space-y-2.5">
-              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                <span className="text-foreground font-medium">{t.board.tiebreakTotal}</span>{" "}
-                {t.board.tiebreakInfoTotal}
-              </p>
-              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                <span className="text-foreground font-medium">{t.board.tiebreakWins}</span>{" "}
-                {t.board.tiebreakInfoWins}
-              </p>
-              <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
-                <span className="text-foreground font-medium">{t.board.tiebreakLatest}</span>{" "}
-                {t.board.tiebreakInfoLatest}
-              </p>
-            </div>
+            {panelBody}
           </div>
         </>
       )}
