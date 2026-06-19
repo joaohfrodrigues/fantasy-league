@@ -43,7 +43,7 @@ export const en: Dict = {
 
     features: {
       title: "Why use the tracker",
-      simulateTitle: "Simulated finish",
+      simulateTitle: "Simulations for results and future scenarios",
       simulateDesc:
         "We project every remaining round to show each player's live odds of winning — and you can run what-if scenarios to see how future results would shift them.",
       prizesTitle: "Winners & prizes",
