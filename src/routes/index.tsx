@@ -145,13 +145,8 @@ function Landing() {
             <div className="size-9 rounded-lg gradient-pitch grid place-items-center shadow-glow">
               <Trophy className="size-5 text-primary-foreground" />
             </div>
-            <div>
-              <div className="font-display font-bold tracking-tight leading-none">
-                Fantasy Tracker
-              </div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mt-1">
-                {t.landing.brandSubtitle}
-              </div>
+            <div className="font-display font-bold tracking-tight leading-none">
+              Fantasy Tracker
             </div>
           </div>
           <LanguageToggle />

@@ -8,6 +8,47 @@ export type Database = {
   };
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string;
+          changed_at: string;
+          entity_type: string;
+          id: string;
+          league_id: string;
+          new_values: Json | null;
+          old_values: Json | null;
+          record_id: string;
+        };
+        Insert: {
+          action: string;
+          changed_at?: string;
+          entity_type: string;
+          id?: string;
+          league_id: string;
+          new_values?: Json | null;
+          old_values?: Json | null;
+          record_id: string;
+        };
+        Update: {
+          action?: string;
+          changed_at?: string;
+          entity_type?: string;
+          id?: string;
+          league_id?: string;
+          new_values?: Json | null;
+          old_values?: Json | null;
+          record_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       leagues: {
         Row: {
           created_at: string;
@@ -64,6 +105,7 @@ export type Database = {
           display_order: number;
           id: string;
           league_id: string;
+          locked_at: string | null;
           name: string;
           short: string;
         };
@@ -72,6 +114,7 @@ export type Database = {
           display_order?: number;
           id?: string;
           league_id: string;
+          locked_at?: string | null;
           name: string;
           short: string;
         };
@@ -80,6 +123,7 @@ export type Database = {
           display_order?: number;
           id?: string;
           league_id?: string;
+          locked_at?: string | null;
           name?: string;
           short?: string;
         };

@@ -6,6 +6,7 @@
 // INSIDE handlers — this file ships to the client bundle, so top-level imports of
 // them would leak the service-role key / hashing code.
 import { createServerFn } from "@tanstack/react-start";
+import type { Json } from "@/integrations/supabase/types";
 
 const MAX_NAME = 80;
 const MAX_SHORT = 8;
@@ -60,6 +61,13 @@ function dedupeRounds(values: RoundInput[]): RoundInput[] {
 
 type AdminClient = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
+type AuditSnapshot = {
+  id: string;
+  player_id: string;
+  round_id: string;
+  points: number;
+};
+
 async function getAdmin(): Promise<AdminClient> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -93,6 +101,83 @@ async function authorize(admin: AdminClient, slug: string, password: string): Pr
   const leagueId = await getLeagueId(admin, slug);
   await assertPassword(admin, leagueId, password);
   return leagueId;
+}
+
+async function writeAuditLog(
+  admin: AdminClient,
+  entry: {
+    leagueId: string;
+    entityType: string;
+    action: string;
+    recordId: string;
+    oldValues?: Json | null;
+    newValues?: Json | null;
+  },
+): Promise<void> {
+  const { error } = await admin.from("audit_log").insert({
+    league_id: entry.leagueId,
+    entity_type: entry.entityType,
+    action: entry.action,
+    record_id: entry.recordId,
+    old_values: entry.oldValues ?? null,
+    new_values: entry.newValues ?? null,
+  });
+  if (error) throw new Error("DB_ERROR");
+}
+
+async function applyScoreUpserts(
+  admin: AdminClient,
+  leagueId: string,
+  toUpsert: { player_id: string; round_id: string; points: number }[],
+  existingByPlayer: Map<string, AuditSnapshot>,
+): Promise<void> {
+  if (!toUpsert.length) return;
+  const { data: upserted, error } = await admin
+    .from("scores")
+    .upsert(toUpsert, { onConflict: "player_id,round_id" })
+    .select("id, player_id, round_id, points");
+  if (error) throw new Error("DB_ERROR");
+
+  for (const score of upserted ?? []) {
+    const previous = existingByPlayer.get(score.player_id) ?? null;
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "score",
+      action: previous ? "UPDATE" : "INSERT",
+      recordId: score.id,
+      oldValues: previous,
+      newValues: score,
+    });
+  }
+}
+
+async function applyScoreClears(
+  admin: AdminClient,
+  leagueId: string,
+  roundId: string,
+  toClear: string[],
+  existingByPlayer: Map<string, AuditSnapshot>,
+): Promise<void> {
+  if (!toClear.length) return;
+  for (const playerId of toClear) {
+    const previous = existingByPlayer.get(playerId);
+    if (!previous) continue;
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "score",
+      action: "DELETE",
+      recordId: previous.id,
+      oldValues: previous,
+      newValues: null,
+    });
+  }
+
+  const { error } = await admin
+    .from("scores")
+    .delete()
+    .eq("round_id", roundId)
+    .in("player_id", toClear);
+  if (error) throw new Error("DB_ERROR");
 }
 
 // --- Create league -----------------------------------------------------------
@@ -247,6 +332,14 @@ export const addPlayer = createServerFn({ method: "POST" })
       if (error.code === "23505") throw new Error("DUPLICATE_PLAYER");
       throw new Error("DB_ERROR");
     }
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "player",
+      action: "INSERT",
+      recordId: inserted.id,
+      oldValues: null,
+      newValues: { name: data.name, display_order: order },
+    });
     return { id: inserted.id };
   });
 
@@ -261,12 +354,28 @@ export const removePlayer = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const admin = await getAdmin();
     const leagueId = await authorize(admin, data.slug, data.password);
+    const { data: existing } = await admin
+      .from("players")
+      .select("id, name, display_order, drink")
+      .eq("id", data.playerId)
+      .eq("league_id", leagueId)
+      .maybeSingle();
     const { error } = await admin
       .from("players")
       .delete()
       .eq("id", data.playerId)
       .eq("league_id", leagueId);
     if (error) throw new Error("DB_ERROR");
+    if (existing) {
+      await writeAuditLog(admin, {
+        leagueId,
+        entityType: "player",
+        action: "DELETE",
+        recordId: existing.id,
+        oldValues: existing,
+        newValues: null,
+      });
+    }
     return { ok: true };
   });
 
@@ -313,6 +422,14 @@ export const addRound = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (error || !inserted) throw new Error("DB_ERROR");
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "round",
+      action: "INSERT",
+      recordId: inserted.id,
+      oldValues: null,
+      newValues: { name, short: String(order), display_order: order },
+    });
     return { id: inserted.id };
   });
 
@@ -336,7 +453,7 @@ export const deleteRound = createServerFn({ method: "POST" })
 
     const { data: target } = await admin
       .from("rounds")
-      .select("id")
+      .select("id, name, short, display_order, locked_at")
       .eq("id", data.roundId)
       .eq("league_id", leagueId)
       .maybeSingle();
@@ -348,6 +465,15 @@ export const deleteRound = createServerFn({ method: "POST" })
       .eq("id", data.roundId)
       .eq("league_id", leagueId);
     if (deleteErr) throw new Error("DB_ERROR");
+
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "round",
+      action: "DELETE",
+      recordId: target.id,
+      oldValues: target,
+      newValues: null,
+    });
 
     const { data: remaining, error: listErr } = await admin
       .from("rounds")
@@ -387,12 +513,26 @@ export const setDrink = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const admin = await getAdmin();
     const leagueId = await authorize(admin, data.slug, data.password);
+    const { data: existing } = await admin
+      .from("players")
+      .select("id, drink")
+      .eq("id", data.playerId)
+      .eq("league_id", leagueId)
+      .maybeSingle();
     const { error } = await admin
       .from("players")
       .update({ drink: data.drink })
       .eq("id", data.playerId)
       .eq("league_id", leagueId);
     if (error) throw new Error("DB_ERROR");
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "drink",
+      action: "UPDATE",
+      recordId: data.playerId,
+      oldValues: existing ? { drink: existing.drink } : null,
+      newValues: { drink: data.drink },
+    });
     return { ok: true };
   });
 
@@ -427,11 +567,12 @@ export const saveScores = createServerFn({ method: "POST" })
     // Ensure the round belongs to this league.
     const { data: round } = await admin
       .from("rounds")
-      .select("id")
+      .select("id, locked_at")
       .eq("id", data.roundId)
       .eq("league_id", leagueId)
       .maybeSingle();
     if (!round) throw new Error("ROUND_NOT_FOUND");
+    if (round.locked_at) throw new Error("ROUND_LOCKED");
 
     // Only touch players that actually belong to this league.
     const { data: leaguePlayers } = await admin
@@ -447,19 +588,134 @@ export const saveScores = createServerFn({ method: "POST" })
       .filter((e) => e.points === null && valid.has(e.playerId))
       .map((e) => e.playerId);
 
-    if (toUpsert.length) {
-      const { error } = await admin
-        .from("scores")
-        .upsert(toUpsert, { onConflict: "player_id,round_id" });
-      if (error) throw new Error("DB_ERROR");
-    }
-    if (toClear.length) {
-      const { error } = await admin
-        .from("scores")
-        .delete()
-        .eq("round_id", data.roundId)
-        .in("player_id", toClear);
-      if (error) throw new Error("DB_ERROR");
-    }
+    const touchedPlayerIds = [...new Set([...toUpsert.map((e) => e.player_id), ...toClear])];
+    const { data: existingScores, error: existingScoresError } = touchedPlayerIds.length
+      ? await admin
+          .from("scores")
+          .select("id, player_id, round_id, points")
+          .eq("round_id", data.roundId)
+          .in("player_id", touchedPlayerIds)
+      : { data: [] as AuditSnapshot[], error: null };
+    if (existingScoresError) throw new Error("DB_ERROR");
+
+    const existingByPlayer = new Map(
+      (existingScores ?? []).map((score) => [score.player_id, score]),
+    );
+
+    await applyScoreUpserts(admin, leagueId, toUpsert, existingByPlayer);
+    await applyScoreClears(admin, leagueId, data.roundId, toClear, existingByPlayer);
     return { ok: true };
+  });
+
+// --- Lock / unlock a round ----------------------------------------------------
+
+async function setRoundLock(
+  slug: string,
+  password: string,
+  roundId: string,
+  lock: boolean,
+): Promise<{ ok: true }> {
+  const admin = await getAdmin();
+  const leagueId = await authorize(admin, slug, password);
+
+  const { data: round } = await admin
+    .from("rounds")
+    .select("id, locked_at")
+    .eq("id", roundId)
+    .eq("league_id", leagueId)
+    .maybeSingle();
+  if (!round) throw new Error("ROUND_NOT_FOUND");
+
+  const lockedAt = lock ? new Date().toISOString() : null;
+  const { error } = await admin
+    .from("rounds")
+    .update({ locked_at: lockedAt })
+    .eq("id", roundId)
+    .eq("league_id", leagueId);
+  if (error) throw new Error("DB_ERROR");
+
+  await writeAuditLog(admin, {
+    leagueId,
+    entityType: "round",
+    action: lock ? "LOCK" : "UNLOCK",
+    recordId: roundId,
+    oldValues: { locked_at: round.locked_at },
+    newValues: { locked_at: lockedAt },
+  });
+
+  return { ok: true };
+}
+
+export const lockRound = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; roundId: string }) => ({
+    slug: clean(data?.slug),
+    password: String(data?.password ?? ""),
+    roundId: clean(data?.roundId),
+  }))
+  .handler(
+    async ({ data }): Promise<{ ok: true }> =>
+      setRoundLock(data.slug, data.password, data.roundId, true),
+  );
+
+export const unlockRound = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; roundId: string }) => ({
+    slug: clean(data?.slug),
+    password: String(data?.password ?? ""),
+    roundId: clean(data?.roundId),
+  }))
+  .handler(
+    async ({ data }): Promise<{ ok: true }> =>
+      setRoundLock(data.slug, data.password, data.roundId, false),
+  );
+
+// --- Read audit history -------------------------------------------------------
+
+export type AuditEntry = {
+  id: string;
+  entityType: string;
+  action: string;
+  recordId: string;
+  oldValues: Json | null;
+  newValues: Json | null;
+  changedAt: string;
+};
+
+const AUDIT_PAGE_SIZE = 50;
+const AUDIT_MAX_LIMIT = 200;
+
+export const getAuditLog = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; limit?: number }) => {
+    const rawLimit = Number(data?.limit);
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(Math.trunc(rawLimit), AUDIT_MAX_LIMIT)
+        : AUDIT_PAGE_SIZE;
+    return {
+      slug: clean(data?.slug),
+      password: String(data?.password ?? ""),
+      limit,
+    };
+  })
+  .handler(async ({ data }): Promise<{ entries: AuditEntry[] }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { data: rows, error } = await admin
+      .from("audit_log")
+      .select("id, entity_type, action, record_id, old_values, new_values, changed_at")
+      .eq("league_id", leagueId)
+      .order("changed_at", { ascending: false })
+      .limit(data.limit);
+    if (error) throw new Error("DB_ERROR");
+
+    const entries: AuditEntry[] = (rows ?? []).map((row) => ({
+      id: row.id,
+      entityType: row.entity_type,
+      action: row.action,
+      recordId: row.record_id,
+      oldValues: row.old_values,
+      newValues: row.new_values,
+      changedAt: row.changed_at,
+    }));
+    return { entries };
   });

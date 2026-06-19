@@ -134,10 +134,55 @@ export const pt = {
     addRound: "Adicionar ronda",
     deleteRound: "Remover ronda",
     deleteRoundConfirm: (name: string) => `Remover ${name}? Os pontos desta ronda serão apagados.`,
+    lockRound: "Bloquear ronda",
+    unlockRound: "Desbloquear ronda",
+    lockRoundConfirm: (name: string) =>
+      `Bloquear ${name}? Confirma que a ronda terminou — os pontos não poderão ser editados até desbloquear.`,
+    roundLocked: "Bloqueada",
+    roundLockedNote: "Esta ronda está bloqueada. Desbloqueie para editar os pontos.",
     editingActive: "Edição ativa",
     lockTitle: "Bloquear edição",
     editScores: "Editar pontos",
     unlockTitle: "Desbloquear edição",
+
+    history: "Histórico",
+    historyTitle: "Histórico de edições",
+    historySubtitle: "Alterações recentes nesta liga.",
+    historyEmpty: "Ainda não há alterações registadas.",
+    historyError: "Não foi possível carregar o histórico.",
+    historyLine: (e: {
+      entityType: string;
+      action: string;
+      player?: string;
+      round?: string;
+      from?: string;
+      to?: string;
+    }) => {
+      switch (`${e.entityType}:${e.action}`) {
+        case "score:INSERT":
+          return `${e.player} marcou ${e.to} em ${e.round}`;
+        case "score:UPDATE":
+          return `${e.player} em ${e.round}: ${e.from} → ${e.to}`;
+        case "score:DELETE":
+          return `Pontos de ${e.player} removidos em ${e.round}`;
+        case "round:INSERT":
+          return `Ronda adicionada: ${e.round}`;
+        case "round:DELETE":
+          return `Ronda removida: ${e.round}`;
+        case "round:LOCK":
+          return `Ronda bloqueada: ${e.round}`;
+        case "round:UNLOCK":
+          return `Ronda desbloqueada: ${e.round}`;
+        case "player:INSERT":
+          return `Jogador adicionado: ${e.player}`;
+        case "player:DELETE":
+          return `Jogador removido: ${e.player}`;
+        case "drink:UPDATE":
+          return `Prémio de ${e.player}: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        default:
+          return `${e.entityType} ${e.action.toLowerCase()}`;
+      }
+    },
 
     roundsPlayed: (played: number, total: number) => `${played}/${total} rondas jogadas`,
     heroTitleA: "Quem vai",

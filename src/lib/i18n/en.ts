@@ -131,10 +131,55 @@ export const en: Dict = {
     addRound: "Add round",
     deleteRound: "Delete round",
     deleteRoundConfirm: (name: string) => `Delete ${name}? Scores in this round will be removed.`,
+    lockRound: "Lock round",
+    unlockRound: "Unlock round",
+    lockRoundConfirm: (name: string) =>
+      `Lock ${name}? Confirm the round is finished — scores can't be edited until you unlock it.`,
+    roundLocked: "Locked",
+    roundLockedNote: "This round is locked. Unlock it to edit scores.",
     editingActive: "Editing on",
     lockTitle: "Lock editing",
     editScores: "Edit scores",
     unlockTitle: "Unlock editing",
+
+    history: "History",
+    historyTitle: "Edit history",
+    historySubtitle: "Recent changes in this league.",
+    historyEmpty: "No changes recorded yet.",
+    historyError: "Couldn't load history.",
+    historyLine: (e: {
+      entityType: string;
+      action: string;
+      player?: string;
+      round?: string;
+      from?: string;
+      to?: string;
+    }) => {
+      switch (`${e.entityType}:${e.action}`) {
+        case "score:INSERT":
+          return `${e.player} scored ${e.to} in ${e.round}`;
+        case "score:UPDATE":
+          return `${e.player} in ${e.round}: ${e.from} → ${e.to}`;
+        case "score:DELETE":
+          return `${e.player}'s score removed in ${e.round}`;
+        case "round:INSERT":
+          return `Round added: ${e.round}`;
+        case "round:DELETE":
+          return `Round removed: ${e.round}`;
+        case "round:LOCK":
+          return `Round locked: ${e.round}`;
+        case "round:UNLOCK":
+          return `Round unlocked: ${e.round}`;
+        case "player:INSERT":
+          return `Player added: ${e.player}`;
+        case "player:DELETE":
+          return `Player removed: ${e.player}`;
+        case "drink:UPDATE":
+          return `${e.player} prize: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        default:
+          return `${e.entityType} ${e.action.toLowerCase()}`;
+      }
+    },
 
     roundsPlayed: (played: number, total: number) => `${played}/${total} rounds played`,
     heroTitleA: "Who's getting",

@@ -23,6 +23,7 @@ import {
   Sigma,
   Swords,
   Gauge,
+  History,
 } from "lucide-react";
 import {
   verifyLeaguePassword,
@@ -32,6 +33,10 @@ import {
   deleteRound as deleteRoundFn,
   setDrink as setDrinkFn,
   saveScores as saveScoresFn,
+  lockRound as lockRoundFn,
+  unlockRound as unlockRoundFn,
+  getAuditLog as getAuditLogFn,
+  type AuditEntry,
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
@@ -43,7 +48,13 @@ export const Route = createFileRoute("/$slug")({
 });
 
 type League = { id: string; slug: string; name: string };
-type Round = { id: string; name: string; short: string; display_order: number };
+type Round = {
+  id: string;
+  name: string;
+  short: string;
+  display_order: number;
+  locked_at: string | null;
+};
 type Player = { id: string; name: string; display_order: number; drink: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
 
@@ -105,6 +116,7 @@ function LeagueBoard() {
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState("");
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Column the standings table is sorted by. "total" | "prizes" | "dinner" | <roundId>.
   const [sortKey, setSortKey] = useState<string>("total");
@@ -468,6 +480,17 @@ function LeagueBoard() {
     }
   }
 
+  async function setRoundLock(roundId: string, locked: boolean) {
+    if (!password) return;
+    try {
+      const fn = locked ? lockRoundFn : unlockRoundFn;
+      await fn({ data: { slug, password, roundId } });
+      await loadAll();
+    } catch (err) {
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-muted-foreground">
@@ -528,6 +551,16 @@ function LeagueBoard() {
               >
                 <UserPlus className="size-4" />
                 {t.board.addPlayer}
+              </button>
+            )}
+            {unlocked && (
+              <button
+                onClick={() => setShowHistory(true)}
+                className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.historyTitle}
+              >
+                <History className="size-4" />
+                {t.board.history}
               </button>
             )}
             {unlocked ? (
@@ -865,7 +898,19 @@ function LeagueBoard() {
           onClose={() => setEditing(null)}
           onAddRound={addRound}
           onDeleteRound={deleteRound}
+          onSetRoundLock={setRoundLock}
           onSaved={() => loadAll()}
+        />
+      )}
+
+      {showHistory && unlocked && password && (
+        <HistoryModal
+          slug={slug}
+          password={password}
+          players={players}
+          rounds={rounds}
+          onClose={() => setShowHistory(false)}
+          onAuthFailure={handleAuthFailure}
         />
       )}
 
@@ -1247,6 +1292,130 @@ function Modal({
   );
 }
 
+function auditRecord(value: AuditEntry["oldValues"]): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asText(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return String(value);
+}
+
+function HistoryModal({
+  slug,
+  password,
+  players,
+  rounds,
+  onClose,
+  onAuthFailure,
+}: Readonly<{
+  slug: string;
+  password: string;
+  players: Player[];
+  rounds: Round[];
+  onClose: () => void;
+  onAuthFailure: () => void;
+}>) {
+  const t = useT();
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getAuditLogFn({ data: { slug, password } })
+      .then((res) => {
+        if (active) setEntries(res.entries);
+      })
+      .catch((err) => {
+        if (isAuthError(err)) {
+          onClose();
+          onAuthFailure();
+          return;
+        }
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [slug, password, onClose, onAuthFailure]);
+
+  const playerById = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
+  const roundById = useMemo(() => new Map(rounds.map((r) => [r.id, r.name])), [rounds]);
+
+  function describe(entry: AuditEntry) {
+    const oldV = auditRecord(entry.oldValues);
+    const newV = auditRecord(entry.newValues);
+    const player = (id?: unknown) => (id != null ? playerById.get(String(id)) : undefined);
+    const round = (id?: unknown) => (id != null ? roundById.get(String(id)) : undefined);
+
+    if (entry.entityType === "score") {
+      return t.board.historyLine({
+        entityType: "score",
+        action: entry.action,
+        player: player(newV?.player_id ?? oldV?.player_id) ?? "—",
+        round: round(newV?.round_id ?? oldV?.round_id) ?? "—",
+        from: asText(oldV?.points),
+        to: asText(newV?.points),
+      });
+    }
+    if (entry.entityType === "round") {
+      return t.board.historyLine({
+        entityType: "round",
+        action: entry.action,
+        round: asText(newV?.name ?? oldV?.name) ?? round(entry.recordId) ?? "—",
+      });
+    }
+    if (entry.entityType === "player") {
+      return t.board.historyLine({
+        entityType: "player",
+        action: entry.action,
+        player: asText(newV?.name ?? oldV?.name) ?? player(entry.recordId) ?? "—",
+      });
+    }
+    if (entry.entityType === "drink") {
+      return t.board.historyLine({
+        entityType: "drink",
+        action: entry.action,
+        player: player(entry.recordId) ?? "—",
+        from: asText(oldV?.drink),
+        to: asText(newV?.drink),
+      });
+    }
+    return t.board.historyLine({ entityType: entry.entityType, action: entry.action });
+  }
+
+  return (
+    <Modal onClose={onClose} title={t.board.historyTitle}>
+      <p className="text-xs text-muted-foreground -mt-3 mb-4">{t.board.historySubtitle}</p>
+      {entries === null && !failed && (
+        <div className="grid place-items-center py-8 text-muted-foreground">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+      )}
+      {failed && (
+        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.historyError}</p>
+      )}
+      {entries !== null && entries.length === 0 && (
+        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.historyEmpty}</p>
+      )}
+      {entries !== null && entries.length > 0 && (
+        <ul className="max-h-[55vh] overflow-y-auto -mx-1 px-1 divide-y divide-border/40">
+          {entries.map((entry) => (
+            <li key={entry.id} className="flex items-start justify-between gap-3 py-2.5">
+              <span className="text-sm leading-snug">{describe(entry)}</span>
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap tabular-nums shrink-0 pt-0.5">
+                {new Date(entry.changedAt).toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
 function RoundEditor({
   slug,
   password,
@@ -1258,6 +1427,7 @@ function RoundEditor({
   onClose,
   onAddRound,
   onDeleteRound,
+  onSetRoundLock,
   onSaved,
 }: {
   slug: string;
@@ -1270,6 +1440,7 @@ function RoundEditor({
   onClose: () => void;
   onAddRound: () => Promise<void>;
   onDeleteRound: (roundId: string) => Promise<void>;
+  onSetRoundLock: (roundId: string, locked: boolean) => Promise<void>;
   onSaved: () => void;
 }) {
   const [currentId, setCurrentId] = useState(roundId);
@@ -1277,6 +1448,7 @@ function RoundEditor({
   const [saving, setSaving] = useState(false);
   const [addingRound, setAddingRound] = useState(false);
   const [deletingRound, setDeletingRound] = useState(false);
+  const [togglingLock, setTogglingLock] = useState(false);
   const t = useT();
 
   useEffect(() => {
@@ -1315,8 +1487,20 @@ function RoundEditor({
     }
   }
 
-  async function save() {
+  async function toggleLock() {
     if (!round) return;
+    const locked = !!round.locked_at;
+    if (!locked && !window.confirm(t.board.lockRoundConfirm(round.name))) return;
+    setTogglingLock(true);
+    try {
+      await onSetRoundLock(round.id, !locked);
+    } finally {
+      setTogglingLock(false);
+    }
+  }
+
+  async function save() {
+    if (!round || round.locked_at) return;
     setSaving(true);
     const entries = players.map((p) => ({
       playerId: p.id,
@@ -1338,6 +1522,8 @@ function RoundEditor({
 
   if (!round) return null;
 
+  const locked = !!round.locked_at;
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm p-4"
@@ -1353,9 +1539,31 @@ function RoundEditor({
               <div className="text-[11px] uppercase tracking-[0.2em] text-pitch mb-1">
                 {t.board.roundLabel}
               </div>
-              <h3 className="font-display text-2xl font-bold">{round.name}</h3>
+              <h3 className="font-display text-2xl font-bold flex items-center gap-2">
+                {round.name}
+                {locked && (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-pitch/15 text-pitch font-semibold">
+                    <Lock className="size-3" />
+                    {t.board.roundLocked}
+                  </span>
+                )}
+              </h3>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={toggleLock}
+                disabled={togglingLock}
+                className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-50"
+                title={locked ? t.board.unlockRound : t.board.lockRound}
+              >
+                {togglingLock ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : locked ? (
+                  <Unlock className="size-4" />
+                ) : (
+                  <Lock className="size-4" />
+                )}
+              </button>
               <button
                 onClick={addRound}
                 disabled={addingRound}
@@ -1390,13 +1598,14 @@ function RoundEditor({
               <button
                 key={r.id}
                 onClick={() => setCurrentId(r.id)}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1 ${
                   r.id === currentId
                     ? "bg-pitch text-pitch-foreground font-medium"
                     : "bg-surface-elevated text-muted-foreground hover:text-foreground"
                 }`}
                 title={r.name}
               >
+                {r.locked_at && <Lock className="size-2.5" />}
                 {r.short}
               </button>
             ))}
@@ -1404,6 +1613,12 @@ function RoundEditor({
         </div>
 
         <div className="px-6 py-4 max-h-[50vh] overflow-y-auto">
+          {locked && (
+            <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground bg-surface-elevated/60 border border-border/40 rounded-lg px-3 py-2">
+              <Lock className="size-3.5 shrink-0 text-pitch" />
+              {t.board.roundLockedNote}
+            </div>
+          )}
           <div className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-4 gap-y-2 items-center">
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
               {t.board.colPlayer}
@@ -1416,6 +1631,7 @@ function RoundEditor({
                 key={p.id}
                 name={p.name}
                 value={draft[p.id] ?? ""}
+                disabled={locked}
                 onChange={(v) => setDraft((d) => ({ ...d, [p.id]: v }))}
               />
             ))}
@@ -1427,16 +1643,18 @@ function RoundEditor({
             onClick={onClose}
             className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
           >
-            {t.common.cancel}
+            {locked ? t.common.close : t.common.cancel}
           </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
-          >
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {t.common.save}
-          </button>
+          {!locked && (
+            <button
+              onClick={save}
+              disabled={saving}
+              className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              {t.common.save}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1447,10 +1665,12 @@ function RowInput({
   name,
   value,
   onChange,
+  disabled = false,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const t = useT();
   const numeric = parseDraftPoints(value);
@@ -1467,7 +1687,8 @@ function RowInput({
           step={1}
           value={sliderValue}
           onChange={(e) => onChange(e.currentTarget.value)}
-          className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)]"
+          disabled={disabled}
+          className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)] disabled:opacity-50"
           aria-label={name}
         />
         <input
@@ -1481,12 +1702,14 @@ function RowInput({
             onChange(next === null ? "" : String(next));
           }}
           placeholder="0"
-          className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16"
+          disabled={disabled}
+          className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => onChange("")}
-          className="px-2 py-1 text-[11px] rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground"
+          disabled={disabled}
+          className="px-2 py-1 text-[11px] rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground disabled:opacity-30"
           title={t.board.clearScore}
         >
           <X className="size-3" />
