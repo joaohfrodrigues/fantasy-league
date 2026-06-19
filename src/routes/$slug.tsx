@@ -1118,6 +1118,11 @@ function LeagueBoard() {
                   <TiebreakInfo />
                 </div>
               )}
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground md:hidden">
+                <Trophy className="size-3.5 text-muted-foreground" aria-hidden />
+                <span className="text-[11px] uppercase tracking-wider">{t.board.colDinner}</span>
+                <WinOddsInfo />
+              </div>
             </div>
             {unlocked && (
               <div className="flex items-center gap-2 flex-wrap sm:justify-end">
@@ -1173,7 +1178,7 @@ function LeagueBoard() {
                       type="button"
                       onClick={() => sortBy("prizes")}
                       title={t.board.sortBy(t.board.colRoundPrizes)}
-                      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                      className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
                         sortKey === "prizes" ? "text-foreground" : ""
                       }`}
                     >
@@ -1187,7 +1192,7 @@ function LeagueBoard() {
                         type="button"
                         onClick={() => sortBy("dinner")}
                         title={t.board.sortBy(t.board.colDinner)}
-                        className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                        className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
                           sortKey === "dinner" ? "text-foreground" : ""
                         }`}
                       >
@@ -1207,7 +1212,7 @@ function LeagueBoard() {
                         type="button"
                         onClick={() => sortBy(r.id)}
                         title={t.board.sortBy(r.name)}
-                        className={`inline-flex items-center gap-0.5 hover:text-foreground transition-colors ${
+                        className={`uppercase tracking-wider inline-flex items-center gap-0.5 hover:text-foreground transition-colors ${
                           sortKey === r.id ? "text-foreground" : ""
                         }`}
                       >
@@ -1221,7 +1226,7 @@ function LeagueBoard() {
                       type="button"
                       onClick={() => sortBy("total")}
                       title={t.board.sortBy(t.board.colTotal)}
-                      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+                      className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
                         sortKey === "total" ? "text-foreground" : ""
                       }`}
                     >

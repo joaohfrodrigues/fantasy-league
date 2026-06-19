@@ -44,7 +44,7 @@ export const pt = {
 
     features: {
       title: "Porquê usar o tracker",
-      simulateTitle: "Final simulado",
+      simulateTitle: "Simulações para resultados e cenários futuros",
       simulateDesc:
         "Projetamos todas as rondas que faltam para mostrar a probabilidade de cada jogador ganhar — e podes simular cenários hipotéticos para ver como os resultados futuros a alterariam.",
       prizesTitle: "Vencedores e prémios",
