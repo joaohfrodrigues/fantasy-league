@@ -32,13 +32,14 @@ export const pt = {
     metaTitle: "Fantasy League Tracker",
     metaDescription:
       "Acompanha as tuas ligas fantasy. Probabilidades ao vivo, prémios por ronda e o histórico das tuas ligas.",
-    brandSubtitle: "Acompanha as tuas ligas fantasy · Partilha o link · Vê quem janta à pala",
+    brandSubtitle: "Acompanha as tuas ligas fantasy · Partilha o link · Vê quem ganha o prémio",
     heroEyebrow: "Tracker de ligas fantasy",
     heroTitleA: "Cria o teu tracker",
     heroTitleB: "e vê quem janta à pala",
     heroSubtitle:
-      "Acompanha a tua liga fantasy ronda a ronda. Recebes um link para partilhar e uma palavra-passe para editar os pontos — com classificação ao vivo e a probabilidade de cada um ganhar o jantar.",
+      "Acompanha a tua liga fantasy ronda a ronda. Recebes um link para partilhar e uma palavra-passe para editar os pontos — com classificação ao vivo e a probabilidade de cada um ganhar o prémio.",
     heroCta: "Cria o teu tracker",
+    heroFootnote: '* "Jantar à pala" é só um exemplo — a tua liga pode jogar por qualquer prémio.',
 
     features: {
       title: "Porquê usar o tracker",
@@ -139,12 +140,13 @@ export const pt = {
     unlockTitle: "Desbloquear edição",
 
     roundsPlayed: (played: number, total: number) => `${played}/${total} rondas jogadas`,
-    heroTitleA: "Quem vai comer",
-    heroTitleB: "o jantar à pala",
+    heroTitleA: "Quem vai",
+    heroTitleB: "jantar à pala",
     heroSubtitle: (remaining: number) =>
-      `Classificação em tempo real, probabilidade de ganhar o jantar com ${remaining} ${
+      `Classificação em tempo real, probabilidade de ganhar o prémio com ${remaining} ${
         remaining === 1 ? "ronda" : "rondas"
       } por jogar.`,
+    heroFootnote: '* "Jantar à pala" é só um exemplo — a tua liga pode jogar por qualquer prémio.',
 
     standings: "Classificação",
     standingsSummary: (players: number, rounds: number) =>
@@ -157,7 +159,7 @@ export const pt = {
 
     colPlayer: "Jogador",
     colRoundPrizes: "Premios por ronda",
-    colDinner: "Jantar pago",
+    colDinner: "Prémio ganho",
     colTotal: "Total",
 
     winsBadgeTitle: (n: number) => `${n} ${n === 1 ? "ronda ganha" : "rondas ganhas"}`,
@@ -166,7 +168,7 @@ export const pt = {
     changeRoundPrizeEmoji: "Mudar emoji do premio da ronda",
     noPlayers: "Sem jogadores ainda.",
     footer:
-      "Edição em tempo real · Probabilidade de ganhar o jantar simulada com base nas rondas já jogadas",
+      "Edição em tempo real · Probabilidade de ganhar o prémio simulada com base nas rondas já jogadas",
 
     sortBy: (col: string) => `Ordenar por ${col}`,
     statsTitle: "Estatísticas",
@@ -179,7 +181,7 @@ export const pt = {
     statsLeadBy: (name: string) => `${name} à frente`,
     statsTied: "Empate na liderança",
 
-    dinner1: "Jantar pago!",
+    dinner1: "Prémio ganho!",
     dinner2: "Quase lá!",
     dinner3: "ACREDITA!",
     dinner4: "A precisar de sorte",
@@ -192,7 +194,7 @@ export const pt = {
     infoStep1c: "com alguma variação aleatória.",
     infoStep2a: "Repetimos este cenário",
     infoStep2bold: "milhares de vezes",
-    infoStep2c: ". Quem ficar com o total mais alto ganha o jantar nesse cenário.",
+    infoStep2c: ". Quem ficar com o total mais alto ganha o prémio nesse cenário.",
     infoStep3a: "A probabilidade é a",
     infoStep3bold: "fração de cenários",
     infoStep3c: "em que cada jogador vence.",

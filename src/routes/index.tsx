@@ -165,9 +165,13 @@ function Landing() {
           {t.landing.heroTitleA}
           <br />
           <span className="text-pitch">{t.landing.heroTitleB}</span>
+          <sup className="text-pitch/60 text-2xl font-normal align-super">*</sup>
         </h1>
         <p className="text-muted-foreground mt-5 max-w-xl text-lg animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
           {t.landing.heroSubtitle}
+        </p>
+        <p className="text-xs text-muted-foreground/70 mt-3 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
+          {t.landing.heroFootnote}
         </p>
         <div className="mt-10 flex justify-center animate-in fade-in slide-in-from-top-6 duration-700 delay-[450ms] fill-mode-both">
           <a

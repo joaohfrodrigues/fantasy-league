@@ -561,10 +561,14 @@ function LeagueBoard() {
         <h1 className="font-display text-5xl sm:text-6xl font-bold leading-[0.95] max-w-3xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100 fill-mode-both">
           {t.board.heroTitleA}
           <br />
-          <span className="text-pitch">{t.board.heroTitleB}</span>?
+          <span className="text-pitch">{t.board.heroTitleB}</span>
+          <sup className="text-pitch/60 text-2xl font-normal align-super">*</sup>?
         </h1>
         <p className="text-muted-foreground mt-5 max-w-xl text-lg animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 fill-mode-both">
           {t.board.heroSubtitle(roundsRemaining)}
+        </p>
+        <p className="text-xs text-muted-foreground/70 mt-3 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
+          {t.board.heroFootnote}
         </p>
       </section>
 

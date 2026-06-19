@@ -31,13 +31,14 @@ export const en: Dict = {
   landing: {
     metaTitle: "Fantasy League Tracker",
     metaDescription: "Track your fantasy leagues. Live odds, round prizes and your league history.",
-    brandSubtitle: "Track your fantasy leagues · Share the link · See who gets dinner for free",
+    brandSubtitle: "Track your fantasy leagues · Share the link · See who wins the prize",
     heroEyebrow: "Fantasy league tracker",
     heroTitleA: "Create your league tracker",
     heroTitleB: "and see who gets dinner for free",
     heroSubtitle:
-      "Track your fantasy league round by round. You get a link to share and a password to edit scores — with live standings and each player's odds of winning dinner.",
+      "Track your fantasy league round by round. You get a link to share and a password to edit scores — with live standings and each player's odds of winning the prize.",
     heroCta: "Create your tracker",
+    heroFootnote: '* "Dinner for free" is just an example — your league can play for any prize.',
 
     features: {
       title: "Why use the tracker",
@@ -139,9 +140,10 @@ export const en: Dict = {
     heroTitleA: "Who's getting",
     heroTitleB: "dinner for free",
     heroSubtitle: (remaining: number) =>
-      `Live standings and the odds of winning dinner with ${remaining} ${
+      `Live standings and the odds of winning the prize with ${remaining} ${
         remaining === 1 ? "round" : "rounds"
       } left to play.`,
+    heroFootnote: '* "Dinner for free" is just an example — your league can play for any prize.',
 
     standings: "Standings",
     standingsSummary: (players: number, rounds: number) =>
@@ -153,7 +155,7 @@ export const en: Dict = {
 
     colPlayer: "Player",
     colRoundPrizes: "Round prizes",
-    colDinner: "Dinner paid",
+    colDinner: "Prize won",
     colTotal: "Total",
 
     winsBadgeTitle: (n: number) => `${n} ${n === 1 ? "round won" : "rounds won"}`,
@@ -161,7 +163,7 @@ export const en: Dict = {
     removePlayer: "Remove player",
     changeRoundPrizeEmoji: "Change round prize emoji",
     noPlayers: "No players yet.",
-    footer: "Live editing · Odds of winning dinner simulated from the rounds played so far",
+    footer: "Live editing · Odds of winning the prize simulated from the rounds played so far",
 
     sortBy: (col: string) => `Sort by ${col}`,
     statsTitle: "Stats",
@@ -174,7 +176,7 @@ export const en: Dict = {
     statsLeadBy: (name: string) => `${name} ahead`,
     statsTied: "Tied at the top",
 
-    dinner1: "Dinner paid!",
+    dinner1: "Prize won!",
     dinner2: "Almost there!",
     dinner3: "BELIEVE IT!",
     dinner4: "Needs some luck",
@@ -187,7 +189,7 @@ export const en: Dict = {
     infoStep1c: "plus some random variation.",
     infoStep2a: "We repeat this scenario",
     infoStep2bold: "thousands of times",
-    infoStep2c: ". Whoever ends with the highest total wins dinner in that scenario.",
+    infoStep2c: ". Whoever ends with the highest total wins the prize in that scenario.",
     infoStep3a: "The probability is the",
     infoStep3bold: "fraction of scenarios",
     infoStep3c: "in which each player wins.",
