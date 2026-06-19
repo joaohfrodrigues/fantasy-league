@@ -650,38 +650,39 @@ function LeagueBoard() {
             {unlocked && (
               <button
                 onClick={() => setAddingPlayer(true)}
-                className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.addPlayer}
+                aria-label={t.board.addPlayer}
               >
-                <UserPlus className="size-4" />
-                {t.board.addPlayer}
+                <UserPlus className="size-3.5" />
               </button>
             )}
             {unlocked && (
               <button
                 onClick={() => setShowHistory(true)}
-                className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
                 title={t.board.historyTitle}
+                aria-label={t.board.history}
               >
-                <History className="size-4" />
-                {t.board.history}
+                <History className="size-3.5" />
               </button>
             )}
             {unlocked && (
               <button
                 onClick={exportData}
-                className="hidden sm:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
                 title={t.board.exportTitle}
+                aria-label={t.board.exportData}
               >
-                <Download className="size-4" />
-                {t.board.exportData}
+                <Download className="size-3.5" />
               </button>
             )}
             <button
               onClick={toggleWhatIf}
-              className={`inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md transition-colors ${
+              className={`inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
                 whatIfOn
-                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
-                  : "bg-surface-elevated text-muted-foreground hover:text-foreground"
+                  ? "bg-amber-500 text-white shadow-sm hover:bg-amber-500/90"
+                  : "border border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
               }`}
               title={t.board.whatIfTitle}
             >
