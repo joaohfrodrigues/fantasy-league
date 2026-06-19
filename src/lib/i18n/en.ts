@@ -69,7 +69,7 @@ export const en: Dict = {
     leagueNamePlaceholder: "World Cup 2026",
     createPasswordLabel: "Password",
     createPasswordPlaceholder: "Leave empty to auto-generate",
-    createPasswordHelp: "Optional. Use 4 to 8 characters.",
+    createPasswordHelp: "Optional. Use 8 to 64 characters.",
     playersTitle: "Players",
     playerPlaceholder: (i: number) => `Player ${i + 1}`,
     templates: {
@@ -115,7 +115,9 @@ export const en: Dict = {
     errNoName: "Give your league a name.",
     errPlayers: "Add at least 2 players.",
     errRounds: "Add at least 1 round.",
-    errPasswordLength: "Password must be 4 to 8 characters.",
+    errPasswordLength: "Password must be 8 to 64 characters and not too simple.",
+    errRateLimited: "Too many attempts right now. Please wait a moment and try again.",
+    errLeagueCapacity: "New league creation is temporarily unavailable. Please try again later.",
     errCreate: "Couldn't create the league. Please try again.",
 
     createdTitle: "League created!",
@@ -306,6 +308,7 @@ export const en: Dict = {
     passwordPlaceholder: "Password",
     passwordWrong: "Incorrect password.",
     passwordCheckFailed: "Couldn't verify password right now. Please try again in a moment.",
+    passwordRateLimited: "Too many attempts. Please wait a moment before trying again.",
     unlock: "Unlock",
 
     roundLabel: "Round",

@@ -14,8 +14,13 @@ const MAX_PLAYERS = 40;
 const MAX_ROUNDS = 40;
 const MIN_ROUNDS = 1;
 const SLUG_RETRIES = 6;
-const MIN_PASSWORD = 4;
-const MAX_PASSWORD = 8;
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 64;
+
+const CREATE_LEAGUE_LIMIT_WINDOW_MS = 60_000;
+const CREATE_LEAGUE_MAX_PER_WINDOW = 6;
+const DEFAULT_MAX_LEAGUES_TOTAL = 10_000;
+const DEFAULT_MAX_LEAGUES_PER_HOUR = 120;
 
 export type CreateLeagueResult = {
   slug: string;
@@ -67,6 +72,21 @@ function dedupeRounds(values: RoundInput[]): RoundInput[] {
   return out;
 }
 
+function isWeakPassword(password: string): boolean {
+  if (!password) return false;
+  const allSame = new Set(password).size <= 1;
+  const numericSequence = /^\d+$/.test(password) && /^\d{8,}$/.test(password);
+  return allSame || numericSequence;
+}
+
+function getEnvInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 type AdminClient = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
 type AuditSnapshot = {
@@ -106,8 +126,22 @@ async function assertPassword(
 
 /** Verify a league + password and return the league id (throws on failure). */
 async function authorize(admin: AdminClient, slug: string, password: string): Promise<string> {
+  const { getRetryAfterMs, registerFailedAuthAttempt, clearAuthFailures } =
+    await import("./rate-limit.server");
+  const authLimitKey = `auth:${slug.toLowerCase()}`;
+  const retryAfterMs = getRetryAfterMs(authLimitKey);
+  if (retryAfterMs > 0) throw new Error("RATE_LIMITED");
+
   const leagueId = await getLeagueId(admin, slug);
-  await assertPassword(admin, leagueId, password);
+  try {
+    await assertPassword(admin, leagueId, password);
+    clearAuthFailures(authLimitKey);
+  } catch (err) {
+    if (err instanceof Error && err.message === "WRONG_PASSWORD") {
+      registerFailedAuthAttempt(authLimitKey);
+    }
+    throw err;
+  }
   return leagueId;
 }
 
@@ -205,6 +239,7 @@ export const createLeague = createServerFn({ method: "POST" })
       if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD)) {
         throw new Error("INVALID_PASSWORD");
       }
+      if (password && isWeakPassword(password)) throw new Error("INVALID_PASSWORD");
       if (
         playerNames.some((n) => n.length > MAX_NAME) ||
         rounds.some((r) => r.name.length > MAX_NAME)
@@ -216,8 +251,37 @@ export const createLeague = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }): Promise<CreateLeagueResult> => {
+    const { consumeWindowLimit } = await import("./rate-limit.server");
+    const createRetryMs = consumeWindowLimit(
+      "create-league",
+      CREATE_LEAGUE_MAX_PER_WINDOW,
+      CREATE_LEAGUE_LIMIT_WINDOW_MS,
+    );
+    if (createRetryMs > 0) throw new Error("RATE_LIMITED");
+
     const admin = await getAdmin();
     const { generateSlug, generatePassword, hashPassword } = await import("./crypto.server");
+
+    // DB-backed guardrails so storage cannot grow unbounded even if in-memory
+    // limits are bypassed or multiple server instances are running.
+    const maxLeaguesTotal = getEnvInt("MAX_LEAGUES_TOTAL", DEFAULT_MAX_LEAGUES_TOTAL);
+    const maxLeaguesPerHour = getEnvInt("MAX_LEAGUES_PER_HOUR", DEFAULT_MAX_LEAGUES_PER_HOUR);
+    const oneHourAgoIso = new Date(Date.now() - 60 * 60_000).toISOString();
+
+    const [
+      { count: totalLeagueCount, error: totalCountErr },
+      { count: hourLeagueCount, error: hourCountErr },
+    ] = await Promise.all([
+      admin.from("leagues").select("id", { count: "exact", head: true }),
+      admin
+        .from("leagues")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", oneHourAgoIso),
+    ]);
+
+    if (totalCountErr || hourCountErr) throw new Error("DB_ERROR");
+    if ((totalLeagueCount ?? 0) >= maxLeaguesTotal) throw new Error("LEAGUE_CAP_REACHED");
+    if ((hourLeagueCount ?? 0) >= maxLeaguesPerHour) throw new Error("RATE_LIMITED");
 
     // Find a free slug.
     let slug = "";
@@ -289,12 +353,20 @@ export const verifyLeaguePassword = createServerFn({ method: "POST" })
     password: typeof data?.password === "string" ? data.password : "",
   }))
   .handler(
-    async ({ data }): Promise<{ ok: boolean; reason?: "WRONG_PASSWORD" | "SERVER_ERROR" }> => {
+    async ({
+      data,
+    }): Promise<{
+      ok: boolean;
+      reason?: "WRONG_PASSWORD" | "RATE_LIMITED" | "SERVER_ERROR";
+    }> => {
       const admin = await getAdmin();
       try {
         await authorize(admin, data.slug, data.password);
         return { ok: true };
       } catch (err) {
+        if (err instanceof Error && err.message === "RATE_LIMITED") {
+          return { ok: false, reason: "RATE_LIMITED" };
+        }
         if (err instanceof Error && err.message === "WRONG_PASSWORD") {
           return { ok: false, reason: "WRONG_PASSWORD" };
         }

@@ -70,7 +70,7 @@ export const pt = {
     leagueNamePlaceholder: "Mundial 2026",
     createPasswordLabel: "Palavra-passe",
     createPasswordPlaceholder: "Deixa vazio para gerar automaticamente",
-    createPasswordHelp: "Opcional. Usa entre 4 e 8 caracteres.",
+    createPasswordHelp: "Opcional. Usa entre 8 e 64 caracteres.",
     playersTitle: "Jogadores",
     playerPlaceholder: (i: number) => `Jogador ${i + 1}`,
     templates: {
@@ -116,7 +116,11 @@ export const pt = {
     errNoName: "Dá um nome à liga.",
     errPlayers: "Adiciona pelo menos 2 jogadores.",
     errRounds: "Adiciona pelo menos 1 ronda.",
-    errPasswordLength: "A palavra-passe deve ter entre 4 e 8 caracteres.",
+    errPasswordLength:
+      "A palavra-passe deve ter entre 8 e 64 caracteres e não ser demasiado simples.",
+    errRateLimited: "Tentativas a mais neste momento. Aguarda um pouco e tenta novamente.",
+    errLeagueCapacity:
+      "A criação de novas ligas está temporariamente indisponível. Tenta novamente mais tarde.",
     errCreate: "Não foi possível criar a liga. Tenta novamente.",
 
     createdTitle: "Liga criada!",
@@ -310,6 +314,7 @@ export const pt = {
     passwordPrompt: "Introduz a palavra-passe da liga para editar os pontos.",
     passwordPlaceholder: "Palavra-passe",
     passwordWrong: "Palavra-passe incorreta.",
+    passwordRateLimited: "Tentativas a mais. Aguarda um pouco antes de tentar novamente.",
     passwordCheckFailed:
       "Não foi possível validar a palavra-passe agora. Tenta de novo daqui a pouco.",
     unlock: "Desbloquear",

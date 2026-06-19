@@ -121,7 +121,8 @@ function dinnerLabel(prob: number, n: number, t: Dict) {
 }
 
 function isAuthError(err: unknown): boolean {
-  return String(err instanceof Error ? err.message : err).includes("WRONG_PASSWORD");
+  const msg = String(err instanceof Error ? err.message : err);
+  return msg.includes("WRONG_PASSWORD") || msg.includes("RATE_LIMITED");
 }
 
 function parseDraftPoints(value: string): number | null {
@@ -1507,7 +1508,7 @@ function PasswordModal({
 }) {
   const [value, setValue] = useState("");
   const [checking, setChecking] = useState(false);
-  const [error, setError] = useState<"wrong" | "server" | null>(null);
+  const [error, setError] = useState<"wrong" | "rate" | "server" | null>(null);
   const t = useT();
 
   async function submit() {
@@ -1520,7 +1521,13 @@ function PasswordModal({
       if (ok) {
         onSuccess(pw);
       } else {
-        setError(reason === "WRONG_PASSWORD" ? "wrong" : "server");
+        if (reason === "WRONG_PASSWORD") {
+          setError("wrong");
+        } else if (reason === "RATE_LIMITED") {
+          setError("rate");
+        } else {
+          setError("server");
+        }
       }
     } catch {
       setError("server");
@@ -1552,6 +1559,9 @@ function PasswordModal({
       )}
       {error === "server" && (
         <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-2">{t.board.passwordCheckFailed}</p>
+      )}
+      {error === "rate" && (
+        <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-2">{t.board.passwordRateLimited}</p>
       )}
       <div className="flex justify-end gap-2 mt-5">
         <button

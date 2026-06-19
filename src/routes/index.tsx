@@ -48,8 +48,8 @@ export const Route = createFileRoute("/")({
 });
 
 const DEFAULT_PLAYERS = ["", ""];
-const MIN_PASSWORD = 4;
-const MAX_PASSWORD = 8;
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 64;
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 function slugFromInput(raw: string): string {
@@ -123,7 +123,11 @@ function Landing() {
       setCreated(result);
     } catch (err) {
       console.error("createLeague failed:", err);
-      if (err instanceof Error && err.message === "INVALID_PASSWORD") {
+      if (err instanceof Error && err.message === "LEAGUE_CAP_REACHED") {
+        setError(t.landing.errLeagueCapacity);
+      } else if (err instanceof Error && err.message === "RATE_LIMITED") {
+        setError(t.landing.errRateLimited);
+      } else if (err instanceof Error && err.message === "INVALID_PASSWORD") {
         setError(t.landing.errPasswordLength);
       } else {
         setError(t.landing.errCreate);
