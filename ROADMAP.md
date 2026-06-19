@@ -2,13 +2,13 @@
 
 Progress on the five proposed enhancements. Statuses: ✅ done · 🟡 in progress · ⬜ not started.
 
-| #   | Feature                        | Status | Notes                                                                                                                                                                     |
-| --- | ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Round lock (with confirmation) | ✅     | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                        |
-| 2   | League-level edit history      | ✅     | Audit logging for scores, lock/unlock, player add/remove, round add/delete, drink changes; `getAuditLog` + read-only history viewer in the board.                         |
-| 3   | JSON snapshot import/export    | ✅     | `exportLeague` returns a versioned JSON snapshot (Export button on the board); `importLeague` validates a snapshot and creates a NEW league (import on the landing page). |
-| 4   | What-if mode                   | ⬜     | —                                                                                                                                                                         |
-| 5   | Custom tie-break rules         | ⬜     | —                                                                                                                                                                         |
+| #   | Feature                        | Status | Notes                                                                                                                                                                              |
+| --- | ------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Round lock (with confirmation) | ✅     | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                                 |
+| 2   | League-level edit history      | ✅     | Audit logging for scores, lock/unlock, player add/remove, round add/delete, drink changes; `getAuditLog` + read-only history viewer in the board.                                  |
+| 3   | JSON snapshot import/export    | ✅     | `exportLeague` returns a versioned JSON snapshot (Export button on the board); `importLeague` validates a snapshot and creates a NEW league (server fn only — import UI deferred). |
+| 4   | What-if mode                   | ✅     | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced) from them. Never persisted.                       |
+| 5   | Custom tie-break rules         | ⬜     | —                                                                                                                                                                                  |
 
 ## Phase 2 — Edit history (current)
 

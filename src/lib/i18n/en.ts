@@ -153,6 +153,19 @@ export const en: Dict = {
     exportData: "Export",
     exportTitle: "Download a JSON backup of this league",
 
+    whatIf: "What-if",
+    whatIfTitle: "Explore hypothetical results without saving",
+    whatIfActive: "What-if mode",
+    whatIfBanner:
+      "Hypothetical mode — these scores are never saved. The standings and odds below are simulated from them.",
+    whatIfExit: "Exit",
+    whatIfClearAll: "Clear all",
+    whatIfClearRound: "Clear round",
+    whatIfPickRound: "Round",
+    whatIfNoRounds:
+      "No rounds to explore yet. What-if works on rounds that haven't been played and aren't locked.",
+    whatIfRoundLabel: (name: string) => `Hypothetical scores · ${name}`,
+
     history: "History",
     historyTitle: "Edit history",
     historySubtitle: "Recent changes in this league.",

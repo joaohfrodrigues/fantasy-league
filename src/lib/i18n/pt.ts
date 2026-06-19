@@ -156,6 +156,19 @@ export const pt = {
     exportData: "Exportar",
     exportTitle: "Descarregar uma cópia JSON desta liga",
 
+    whatIf: "E se",
+    whatIfTitle: "Explorar resultados hipotéticos sem guardar",
+    whatIfActive: "Modo e se",
+    whatIfBanner:
+      "Modo hipotético — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
+    whatIfExit: "Sair",
+    whatIfClearAll: "Limpar tudo",
+    whatIfClearRound: "Limpar ronda",
+    whatIfPickRound: "Ronda",
+    whatIfNoRounds:
+      "Ainda não há rondas para explorar. O modo e se aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
+    whatIfRoundLabel: (name: string) => `Pontuações hipotéticas · ${name}`,
+
     history: "Histórico",
     historyTitle: "Histórico de edições",
     historySubtitle: "Alterações recentes nesta liga.",

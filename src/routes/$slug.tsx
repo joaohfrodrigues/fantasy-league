@@ -25,6 +25,7 @@ import {
   Gauge,
   History,
   Download,
+  FlaskConical,
 } from "lucide-react";
 import {
   verifyLeaguePassword,
@@ -119,6 +120,12 @@ function LeagueBoard() {
   const [newPlayerName, setNewPlayerName] = useState("");
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+
+  // What-if mode: layer hypothetical scores over future rounds to preview the
+  // standings and winning odds. Purely client-side — never persisted.
+  const [whatIfOn, setWhatIfOn] = useState(false);
+  const [whatIf, setWhatIf] = useState<Map<string, number>>(new Map());
+  const [whatIfRoundId, setWhatIfRoundId] = useState<string | null>(null);
 
   // Column the standings table is sorted by. "total" | "prizes" | "dinner" | <roundId>.
   const [sortKey, setSortKey] = useState<string>("total");
@@ -236,10 +243,48 @@ function LeagueBoard() {
     return () => clearTimeout(id);
   }, [scoreMap]);
 
+  // Rounds that already have at least one saved score. What-if only applies to
+  // rounds that haven't been played yet and aren't locked.
+  const savedPlayedRoundIds = useMemo(() => {
+    const s = new Set<string>();
+    rounds.forEach((r) => {
+      if (players.some((p) => scoreMap.has(`${p.id}:${r.id}`))) s.add(r.id);
+    });
+    return s;
+  }, [scoreMap, players, rounds]);
+
+  const whatIfRounds = useMemo(
+    () => rounds.filter((r) => !savedPlayedRoundIds.has(r.id) && r.locked_at === null),
+    [rounds, savedPlayedRoundIds],
+  );
+  const selectedWhatIfRound = useMemo(
+    () => whatIfRounds.find((r) => r.id === whatIfRoundId) ?? whatIfRounds[0] ?? null,
+    [whatIfRounds, whatIfRoundId],
+  );
+
+  // Saved scores with hypothetical what-if values layered on top (when active).
+  const effectiveScoreMap = useMemo(() => {
+    if (!whatIfOn || whatIf.size === 0) return scoreMap;
+    const m = new Map(scoreMap);
+    whatIf.forEach((v, k) => m.set(k, v));
+    return m;
+  }, [scoreMap, whatIf, whatIfOn]);
+
+  // Debounced copy that feeds the heavy Monte Carlo + standings so typing
+  // hypothetical scores doesn't re-run the simulation on every keystroke.
+  const [simMap, setSimMap] = useState<Map<string, number>>(scoreMap);
+  useEffect(() => {
+    if (!whatIfOn) {
+      setSimMap(effectiveScoreMap);
+      return;
+    }
+    const id = setTimeout(() => setSimMap(effectiveScoreMap), 250);
+    return () => clearTimeout(id);
+  }, [effectiveScoreMap, whatIfOn]);
+
   const roundsPlayedIds = useMemo(
-    () =>
-      rounds.filter((r) => players.some((p) => scoreMap.has(`${p.id}:${r.id}`))).map((r) => r.id),
-    [scoreMap, players, rounds],
+    () => rounds.filter((r) => players.some((p) => simMap.has(`${p.id}:${r.id}`))).map((r) => r.id),
+    [simMap, players, rounds],
   );
   const roundsRemaining = rounds.length - roundsPlayedIds.length;
 
@@ -247,7 +292,7 @@ function LeagueBoard() {
     const all: number[] = [];
     roundsPlayedIds.forEach((rid) => {
       players.forEach((p) => {
-        const v = scoreMap.get(`${p.id}:${rid}`);
+        const v = simMap.get(`${p.id}:${rid}`);
         if (typeof v === "number") all.push(v);
       });
     });
@@ -255,18 +300,18 @@ function LeagueBoard() {
     const mean = all.reduce((a, b) => a + b, 0) / all.length;
     const variance = all.reduce((a, b) => a + (b - mean) ** 2, 0) / all.length;
     return { mean, std: Math.max(20, Math.sqrt(variance)) };
-  }, [scoreMap, players, roundsPlayedIds]);
+  }, [simMap, players, roundsPlayedIds]);
 
   const playerMean = useMemo(() => {
     const m = new Map<string, number>();
     players.forEach((p) => {
       const vals = roundsPlayedIds
-        .map((rid) => scoreMap.get(`${p.id}:${rid}`))
+        .map((rid) => simMap.get(`${p.id}:${rid}`))
         .filter((v): v is number => typeof v === "number");
       m.set(p.id, vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : leagueStats.mean);
     });
     return m;
-  }, [players, scoreMap, roundsPlayedIds, leagueStats]);
+  }, [players, simMap, roundsPlayedIds, leagueStats]);
 
   // Monte Carlo: probability each player ends FIRST (wins, gets dinner paid)
   const dinnerProb = useMemo(() => {
@@ -280,7 +325,7 @@ function LeagueBoard() {
       let t = 0;
       let n = 0;
       rounds.forEach((r) => {
-        const v = scoreMap.get(`${p.id}:${r.id}`);
+        const v = simMap.get(`${p.id}:${r.id}`);
         if (typeof v === "number") {
           t += v;
           n += 1;
@@ -345,19 +390,19 @@ function LeagueBoard() {
     const out = new Map<string, number>();
     counts.forEach((v, k) => out.set(k, v / samples));
     return out;
-  }, [players, scoreMap, playerMean, leagueStats, roundsRemaining, rounds]);
+  }, [players, simMap, playerMean, leagueStats, roundsRemaining, rounds]);
 
   const standings = useMemo(() => {
     const rows = players.map((p) => {
-      const perRound = rounds.map((r) => scoreMap.get(`${p.id}:${r.id}`) ?? null);
+      const perRound = rounds.map((r) => simMap.get(`${p.id}:${r.id}`) ?? null);
       const agg = perRound.reduce<number>((a, v) => a + (v ?? 0), 0);
       const wins = rounds.reduce((acc, r) => {
         const vals = players
-          .map((pp) => scoreMap.get(`${pp.id}:${r.id}`))
+          .map((pp) => simMap.get(`${pp.id}:${r.id}`))
           .filter((v): v is number => typeof v === "number");
         if (!vals.length) return acc;
         const max = Math.max(...vals);
-        const mine = scoreMap.get(`${p.id}:${r.id}`);
+        const mine = simMap.get(`${p.id}:${r.id}`);
         return mine === max ? acc + 1 : acc;
       }, 0);
       const prob = dinnerProb.get(p.id) ?? 0;
@@ -388,7 +433,7 @@ function LeagueBoard() {
       return (av - bv) * dir;
     });
     return withRank;
-  }, [players, scoreMap, dinnerProb, rounds, sortKey, sortDir]);
+  }, [players, simMap, dinnerProb, rounds, sortKey, sortDir]);
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -399,7 +444,7 @@ function LeagueBoard() {
     rounds.forEach((r) => {
       const entries: { name: string; v: number }[] = [];
       players.forEach((p) => {
-        const v = scoreMap.get(`${p.id}:${r.id}`);
+        const v = simMap.get(`${p.id}:${r.id}`);
         if (typeof v !== "number") return;
         entries.push({ name: p.name, v });
         sum += v;
@@ -417,11 +462,11 @@ function LeagueBoard() {
     });
     const avg = count ? sum / count : 0;
     const totals = [...players]
-      .map((p) => rounds.reduce((a, r) => a + (scoreMap.get(`${p.id}:${r.id}`) ?? 0), 0))
+      .map((p) => rounds.reduce((a, r) => a + (simMap.get(`${p.id}:${r.id}`) ?? 0), 0))
       .sort((a, b) => b - a);
     const lead = totals.length >= 2 ? totals[0] - totals[1] : null;
     return { high, low, margin, avg, count, lead };
-  }, [rounds, players, scoreMap]);
+  }, [rounds, players, simMap]);
 
   async function addPlayer() {
     const name = newPlayerName.trim();
@@ -513,6 +558,42 @@ function LeagueBoard() {
     }
   }
 
+  function toggleWhatIf() {
+    setWhatIfOn((on) => {
+      const next = !on;
+      if (next) {
+        setWhatIfRoundId((cur) => cur ?? whatIfRounds[0]?.id ?? null);
+      } else {
+        setWhatIf(new Map());
+        setWhatIfRoundId(null);
+      }
+      return next;
+    });
+  }
+
+  function setWhatIfScore(playerId: string, roundId: string, value: string) {
+    const key = `${playerId}:${roundId}`;
+    const n = parseDraftPoints(value);
+    setWhatIf((prev) => {
+      const m = new Map(prev);
+      if (n === null) m.delete(key);
+      else m.set(key, n);
+      return m;
+    });
+  }
+
+  function clearWhatIfRound(roundId: string) {
+    setWhatIf((prev) => {
+      const m = new Map(prev);
+      for (const k of [...m.keys()]) if (k.endsWith(`:${roundId}`)) m.delete(k);
+      return m;
+    });
+  }
+
+  function clearWhatIfAll() {
+    setWhatIf(new Map());
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center text-muted-foreground">
@@ -595,6 +676,18 @@ function LeagueBoard() {
                 {t.board.exportData}
               </button>
             )}
+            <button
+              onClick={toggleWhatIf}
+              className={`inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md transition-colors ${
+                whatIfOn
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                  : "bg-surface-elevated text-muted-foreground hover:text-foreground"
+              }`}
+              title={t.board.whatIfTitle}
+            >
+              <FlaskConical className="size-3.5" />
+              {t.board.whatIf}
+            </button>
             {unlocked ? (
               <button
                 onClick={lock}
@@ -636,6 +729,128 @@ function LeagueBoard() {
           {t.board.heroFootnote}
         </p>
       </section>
+
+      {/* What-if panel */}
+      {whatIfOn && (
+        <section className="max-w-6xl mx-auto px-6 pb-2">
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-3">
+                <span className="grid place-items-center size-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                  <FlaskConical className="size-4" />
+                </span>
+                <div>
+                  <h2 className="font-display text-lg font-semibold">{t.board.whatIfActive}</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                    {t.board.whatIfBanner}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {whatIf.size > 0 && (
+                  <button
+                    onClick={clearWhatIfAll}
+                    className="text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {t.board.whatIfClearAll}
+                  </button>
+                )}
+                <button
+                  onClick={toggleWhatIf}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 transition-colors"
+                >
+                  <X className="size-3.5" /> {t.board.whatIfExit}
+                </button>
+              </div>
+            </div>
+
+            {whatIfRounds.length === 0 ? (
+              <p className="text-sm text-muted-foreground mt-4">{t.board.whatIfNoRounds}</p>
+            ) : (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground mr-1">
+                    {t.board.whatIfPickRound}
+                  </span>
+                  {whatIfRounds.map((r) => {
+                    const active = selectedWhatIfRound?.id === r.id;
+                    const count = players.filter((p) => whatIf.has(`${p.id}:${r.id}`)).length;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => setWhatIfRoundId(r.id)}
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
+                          active
+                            ? "bg-amber-500/25 text-amber-700 dark:text-amber-300"
+                            : "bg-surface-elevated text-muted-foreground hover:text-foreground"
+                        }`}
+                        title={r.name}
+                      >
+                        {r.short}
+                        {count > 0 && <span className="text-[10px] opacity-70">({count})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedWhatIfRound && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2 gap-3">
+                      <h3 className="text-sm font-medium">
+                        {t.board.whatIfRoundLabel(selectedWhatIfRound.name)}
+                      </h3>
+                      {players.some((p) => whatIf.has(`${p.id}:${selectedWhatIfRound.id}`)) && (
+                        <button
+                          onClick={() => clearWhatIfRound(selectedWhatIfRound.id)}
+                          className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+                        >
+                          {t.board.whatIfClearRound}
+                        </button>
+                      )}
+                    </div>
+                    {players.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t.board.noPlayers}</p>
+                    ) : (
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2">
+                        {players.map((p) => {
+                          const key = `${p.id}:${selectedWhatIfRound.id}`;
+                          const raw = whatIf.get(key);
+                          return (
+                            <div key={p.id} className="flex items-center gap-3">
+                              <span className="font-display text-sm font-medium truncate flex-1 min-w-0">
+                                {p.name}
+                              </span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={raw === undefined ? "" : String(raw)}
+                                onChange={(e) =>
+                                  setWhatIfScore(p.id, selectedWhatIfRound.id, e.target.value)
+                                }
+                                onBlur={(e) => {
+                                  const next = parseDraftPoints(e.target.value);
+                                  setWhatIfScore(
+                                    p.id,
+                                    selectedWhatIfRound.id,
+                                    next === null ? "" : String(next),
+                                  );
+                                }}
+                                placeholder="—"
+                                aria-label={p.name}
+                                className="bg-input border border-amber-500/30 rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 w-20"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Leaderboard */}
       <section className="max-w-6xl mx-auto px-6 pb-24">
@@ -820,10 +1035,11 @@ function LeagueBoard() {
                       {row.perRound.map((v, idx) => {
                         const rid = rounds[idx].id;
                         const winners = players
-                          .map((pp) => scoreMap.get(`${pp.id}:${rid}`))
+                          .map((pp) => simMap.get(`${pp.id}:${rid}`))
                           .filter((x): x is number => typeof x === "number");
                         const isRoundWin =
                           v !== null && winners.length > 0 && v === Math.max(...winners);
+                        const isWhatIf = whatIfOn && whatIf.has(`${row.player.id}:${rid}`);
                         return (
                           <td
                             key={rid}
@@ -831,6 +1047,8 @@ function LeagueBoard() {
                           >
                             {v === null ? (
                               <span className="text-muted-foreground/30">—</span>
+                            ) : isWhatIf ? (
+                              <span className="text-amber-600 dark:text-amber-400 italic">{v}</span>
                             ) : isRoundWin ? (
                               <span className="text-pitch font-bold">{v}</span>
                             ) : (
