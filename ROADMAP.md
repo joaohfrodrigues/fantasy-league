@@ -8,7 +8,7 @@ Progress on the five proposed enhancements. Statuses: ✅ done · 🟡 in progre
 | 2   | League-level edit history      | ✅     | Audit logging for scores, lock/unlock, player add/remove, round add/delete, drink changes; `getAuditLog` + read-only history viewer in the board.                                  |
 | 3   | JSON snapshot import/export    | ✅     | `exportLeague` returns a versioned JSON snapshot (Export button on the board); `importLeague` validates a snapshot and creates a NEW league (server fn only — import UI deferred). |
 | 4   | What-if mode                   | ✅     | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced) from them. Never persisted.                       |
-| 5   | Custom tie-break rules         | ⬜     | —                                                                                                                                                                                  |
+| 5   | Custom tie-break rules         | ✅     | Per-league `tiebreak` (total / most round wins / best latest round); applied to standings ranks and the finished-league prize split, audited, edited via a selector when unlocked. |
 
 ## Phase 2 — Edit history (current)
 

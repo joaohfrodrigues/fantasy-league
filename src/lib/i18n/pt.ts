@@ -12,6 +12,7 @@ export const pt = {
     remove: "Remover",
     close: "Fechar",
     copy: "Copiar",
+    clear: "Limpar tudo",
   },
 
   root: {
@@ -169,6 +170,12 @@ export const pt = {
       "Ainda não há rondas para explorar. O modo e se aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
     whatIfRoundLabel: (name: string) => `Pontuações hipotéticas · ${name}`,
 
+    tiebreak: "Desempate",
+    tiebreakTitle: "Como são ordenados os jogadores com os mesmos pontos",
+    tiebreakTotal: "Apenas pontos totais",
+    tiebreakWins: "Mais rondas ganhas",
+    tiebreakLatest: "Melhor última ronda",
+
     history: "Histórico",
     historyTitle: "Histórico de edições",
     historySubtitle: "Alterações recentes nesta liga.",
@@ -203,6 +210,8 @@ export const pt = {
           return `Jogador removido: ${e.player}`;
         case "drink:UPDATE":
           return `Prémio de ${e.player}: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        case "league:TIEBREAK":
+          return `Regra de desempate: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         default:
           return `${e.entityType} ${e.action.toLowerCase()}`;
       }

@@ -26,6 +26,7 @@ import {
   History,
   Download,
   FlaskConical,
+  Scale,
 } from "lucide-react";
 import {
   verifyLeaguePassword,
@@ -39,6 +40,7 @@ import {
   unlockRound as unlockRoundFn,
   getAuditLog as getAuditLogFn,
   exportLeague as exportLeagueFn,
+  updateTiebreak as updateTiebreakFn,
   type AuditEntry,
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
@@ -50,7 +52,7 @@ export const Route = createFileRoute("/$slug")({
   component: LeagueBoard,
 });
 
-type League = { id: string; slug: string; name: string };
+type League = { id: string; slug: string; name: string; tiebreak: TiebreakMode };
 type Round = {
   id: string;
   name: string;
@@ -65,6 +67,28 @@ const SCORE_MIN = -10;
 const SCORE_MAX = 150;
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+// Tie-break rule for players level on total points. Always total first, then the
+// configured rule. Kept in sync with the DB CHECK constraint on leagues.tiebreak.
+type TiebreakMode = "total" | "wins" | "latest";
+const TIEBREAKS: TiebreakMode[] = ["total", "wins", "latest"];
+
+type RankMetrics = { agg: number; wins: number; latest: number };
+
+// Order two players for league rank; higher is better. Returns <0 when `a`
+// should rank above `b`.
+function compareRank(a: RankMetrics, b: RankMetrics, mode: TiebreakMode): number {
+  if (a.agg !== b.agg) return b.agg - a.agg;
+  if (mode === "wins" && a.wins !== b.wins) return b.wins - a.wins;
+  if (mode === "latest" && a.latest !== b.latest) return b.latest - a.latest;
+  return 0;
+}
+
+function tiebreakLabel(mode: string, t: Dict): string {
+  if (mode === "wins") return t.board.tiebreakWins;
+  if (mode === "latest") return t.board.tiebreakLatest;
+  return t.board.tiebreakTotal;
+}
 
 // Small deterministic PRNG (mulberry32) so the simulation is reproducible.
 function mulberry32(seed: number) {
@@ -97,7 +121,7 @@ function parseDraftPoints(value: string): number | null {
   if (!trimmed) return null;
   const num = Number(trimmed);
   if (!Number.isFinite(num)) return null;
-  return Math.max(SCORE_MIN, Math.min(SCORE_MAX, Math.trunc(num)));
+  return Math.trunc(num);
 }
 
 function LeagueBoard() {
@@ -144,6 +168,11 @@ function LeagueBoard() {
 
   const unlocked = password !== null;
 
+  const tiebreak: TiebreakMode =
+    league && TIEBREAKS.includes(league.tiebreak as TiebreakMode)
+      ? (league.tiebreak as TiebreakMode)
+      : "total";
+
   useEffect(() => {
     setPassword(localStorage.getItem(pwKey));
   }, [pwKey]);
@@ -151,7 +180,7 @@ function LeagueBoard() {
   const loadAll = useCallback(async () => {
     const { data: lg } = await supabase
       .from("leagues")
-      .select("id, slug, name")
+      .select("id, slug, name, tiebreak")
       .eq("slug", slug)
       .maybeSingle();
     if (!lg) {
@@ -558,6 +587,18 @@ function LeagueBoard() {
     }
   }
 
+  async function changeTiebreak(next: TiebreakMode) {
+    if (!password || !league || next === tiebreak) return;
+    const prev = league;
+    setLeague({ ...league, tiebreak: next });
+    try {
+      await updateTiebreakFn({ data: { slug, password, tiebreak: next } });
+    } catch (err) {
+      setLeague(prev);
+      if (isAuthError(err)) handleAuthFailure();
+    }
+  }
+
   function toggleWhatIf() {
     setWhatIfOn((on) => {
       const next = !on;
@@ -862,6 +903,28 @@ function LeagueBoard() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t.board.standingsSummary(players.length, rounds.length)}
               </p>
+              {unlocked && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Scale className="size-3.5 text-muted-foreground" aria-hidden />
+                  <label
+                    htmlFor="tiebreak-select"
+                    className="text-[11px] uppercase tracking-wider text-muted-foreground"
+                  >
+                    {t.board.tiebreak}
+                  </label>
+                  <select
+                    id="tiebreak-select"
+                    value={tiebreak}
+                    onChange={(e) => changeTiebreak(e.target.value as TiebreakMode)}
+                    title={t.board.tiebreakTitle}
+                    className="bg-input border border-border rounded-md px-2 py-1 text-xs outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+                  >
+                    <option value="total">{t.board.tiebreakTotal}</option>
+                    <option value="wins">{t.board.tiebreakWins}</option>
+                    <option value="latest">{t.board.tiebreakLatest}</option>
+                  </select>
+                </div>
+              )}
             </div>
             {unlocked && (
               <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1634,6 +1697,14 @@ function HistoryModal({
         to: asText(newV?.drink),
       });
     }
+    if (entry.entityType === "league") {
+      return t.board.historyLine({
+        entityType: "league",
+        action: entry.action,
+        from: oldV?.tiebreak != null ? tiebreakLabel(String(oldV.tiebreak), t) : "—",
+        to: newV?.tiebreak != null ? tiebreakLabel(String(newV.tiebreak), t) : "—",
+      });
+    }
     return t.board.historyLine({ entityType: entry.entityType, action: entry.action });
   }
 
@@ -1771,6 +1842,10 @@ function RoundEditor({
     }
   }
 
+  function clearAllScores() {
+    setDraft(Object.fromEntries(players.map((p) => [p.id, ""])));
+  }
+
   if (!round) return null;
 
   const locked = !!round.locked_at;
@@ -1889,23 +1964,39 @@ function RoundEditor({
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-border/40 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            {locked ? t.common.close : t.common.cancel}
-          </button>
-          {!locked && (
+        <div className="px-6 py-4 border-t border-border/40 flex justify-between gap-2">
+          <div>
+            {!locked && (
+              <button
+                onClick={clearAllScores}
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                {t.common.clear}
+              </button>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
             <button
-              onClick={save}
-              disabled={saving}
-              className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
             >
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              {t.common.save}
+              {locked ? t.common.close : t.common.cancel}
             </button>
-          )}
+            {!locked && (
+              <button
+                onClick={save}
+                disabled={saving}
+                className="px-5 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 active:scale-95 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:active:scale-100"
+              >
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                {t.common.save}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1925,7 +2016,7 @@ function RowInput({
 }) {
   const t = useT();
   const numeric = parseDraftPoints(value);
-  const sliderValue = numeric ?? 0;
+  const sliderValue = numeric == null ? 0 : clamp(numeric, SCORE_MIN, SCORE_MAX);
 
   return (
     <>

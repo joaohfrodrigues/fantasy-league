@@ -12,6 +12,7 @@ export const en: Dict = {
     remove: "Remove",
     close: "Close",
     copy: "Copy",
+    clear: "Clear all",
   },
 
   root: {
@@ -166,6 +167,12 @@ export const en: Dict = {
       "No rounds to explore yet. What-if works on rounds that haven't been played and aren't locked.",
     whatIfRoundLabel: (name: string) => `Hypothetical scores · ${name}`,
 
+    tiebreak: "Tie-break",
+    tiebreakTitle: "How players level on total points are ranked",
+    tiebreakTotal: "Total points only",
+    tiebreakWins: "Most round wins",
+    tiebreakLatest: "Best latest round",
+
     history: "History",
     historyTitle: "Edit history",
     historySubtitle: "Recent changes in this league.",
@@ -200,6 +207,8 @@ export const en: Dict = {
           return `Player removed: ${e.player}`;
         case "drink:UPDATE":
           return `${e.player} prize: ${e.from ?? "—"} → ${e.to ?? "—"}`;
+        case "league:TIEBREAK":
+          return `Tie-break rule: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         default:
           return `${e.entityType} ${e.action.toLowerCase()}`;
       }

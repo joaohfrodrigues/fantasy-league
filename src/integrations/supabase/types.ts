@@ -55,18 +55,21 @@ export type Database = {
           id: string;
           name: string;
           slug: string;
+          tiebreak: string;
         };
         Insert: {
           created_at?: string;
           id?: string;
           name: string;
           slug: string;
+          tiebreak?: string;
         };
         Update: {
           created_at?: string;
           id?: string;
           name?: string;
           slug?: string;
+          tiebreak?: string;
         };
         Relationships: [];
       };

@@ -668,6 +668,49 @@ export const unlockRound = createServerFn({ method: "POST" })
       setRoundLock(data.slug, data.password, data.roundId, false),
   );
 
+// --- League tie-break rule -----------------------------------------------------
+
+const TIEBREAK_VALUES = ["total", "wins", "latest"];
+
+/** Update the league's tie-break rule (requires the password). */
+export const updateTiebreak = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; tiebreak: string }) => {
+    const tiebreak = clean(data?.tiebreak);
+    if (!TIEBREAK_VALUES.includes(tiebreak)) throw new Error("INVALID_TIEBREAK");
+    return {
+      slug: clean(data?.slug),
+      password: String(data?.password ?? ""),
+      tiebreak,
+    };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { data: current } = await admin
+      .from("leagues")
+      .select("tiebreak")
+      .eq("id", leagueId)
+      .maybeSingle();
+
+    const { error } = await admin
+      .from("leagues")
+      .update({ tiebreak: data.tiebreak })
+      .eq("id", leagueId);
+    if (error) throw new Error("DB_ERROR");
+
+    await writeAuditLog(admin, {
+      leagueId,
+      entityType: "league",
+      action: "TIEBREAK",
+      recordId: leagueId,
+      oldValues: { tiebreak: current?.tiebreak ?? "total" },
+      newValues: { tiebreak: data.tiebreak },
+    });
+
+    return { ok: true };
+  });
+
 // --- Read audit history -------------------------------------------------------
 
 export type AuditEntry = {
