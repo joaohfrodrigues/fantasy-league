@@ -310,6 +310,11 @@ export const pt = {
     infoFaq2: "Ganha simplesmente quem tem mais pontos.",
 
     addPlayerPlaceholder: "Nome",
+    addPlayersTitle: "Adicionar jogadores",
+    playersLabel: "Jogadores",
+    errDuplicatePlayer: "Um ou mais desses jogadores já existem.",
+    errTooManyPlayers: "Isso excederia o limite de jogadores.",
+    errAddPlayers: "Não foi possível adicionar jogadores. Tenta novamente.",
     passwordPrompt: "Introduz a palavra-passe da liga para editar os pontos.",
     passwordPlaceholder: "Palavra-passe",
     passwordWrong: "Palavra-passe incorreta.",

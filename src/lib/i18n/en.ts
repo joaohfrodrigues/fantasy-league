@@ -304,6 +304,11 @@ export const en: Dict = {
     infoFaq2: "Whoever has the most points simply wins.",
 
     addPlayerPlaceholder: "Name",
+    addPlayersTitle: "Add players",
+    playersLabel: "Players",
+    errDuplicatePlayer: "One or more of those players already exist.",
+    errTooManyPlayers: "That would exceed the player limit.",
+    errAddPlayers: "Couldn't add players. Please try again.",
     passwordPrompt: "Enter the league password to edit the scores.",
     passwordPlaceholder: "Password",
     passwordWrong: "Incorrect password.",
