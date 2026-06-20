@@ -119,8 +119,6 @@ export const pt = {
     errPasswordLength:
       "A palavra-passe deve ter entre 8 e 64 caracteres e não ser demasiado simples.",
     errRateLimited: "Tentativas a mais neste momento. Aguarda um pouco e tenta novamente.",
-    errLeagueCapacity:
-      "A criação de novas ligas está temporariamente indisponível. Tenta novamente mais tarde.",
     errCreate: "Não foi possível criar a liga. Tenta novamente.",
 
     createdTitle: "Liga criada!",

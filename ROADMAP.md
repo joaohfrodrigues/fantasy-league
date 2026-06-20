@@ -88,13 +88,11 @@ feature genuinely can't work device-local (record as an ADR then).
 
 The foundation for any growth. Mostly server + small UX; reuses existing code.
 
-- [ ] **Per-client creation limits, no global cap** — `Open` — `createLeague`'s
-      in-memory `consumeWindowLimit("create-league", …)` uses one **global** key, so
-      all users share one creation budget, and `MAX_LEAGUES_TOTAL` hard-caps the whole
-      product. Move to a **per-IP** window and raise/remove the global total cap (keep
-      a generous per-IP/day cap for abuse). Files: `src/lib/leagues.functions.ts`,
-      `src/lib/rate-limit.server.ts`. Acceptance: two clients creating in parallel
-      don't throttle each other; no fixed product ceiling.
+- [x] **Per-client creation limits, no global cap** — ✅ shipped — `createLeague` now
+      keys the in-memory window per-IP (`create-league:${ip}` via `getClientIp`), the
+      global `MAX_LEAGUES_TOTAL` ceiling is removed, and a raised global hourly DB cap
+      (`MAX_LEAGUES_PER_HOUR`, default 1000) remains as a cross-instance backstop.
+      Covered by `src/lib/rate-limit.test.ts` (per-client isolation + exhaustion).
 - [ ] **10-second create flow** — `In Spec` — let creation succeed with just a name +
       a template (players/rounds editable inline afterwards) instead of full setup up
       front. Reuse `buildTemplateRounds` (`templates.ts`) and existing

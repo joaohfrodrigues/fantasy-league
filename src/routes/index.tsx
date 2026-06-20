@@ -123,9 +123,7 @@ function Landing() {
       setCreated(result);
     } catch (err) {
       console.error("createLeague failed:", err);
-      if (err instanceof Error && err.message === "LEAGUE_CAP_REACHED") {
-        setError(t.landing.errLeagueCapacity);
-      } else if (err instanceof Error && err.message === "RATE_LIMITED") {
+      if (err instanceof Error && err.message === "RATE_LIMITED") {
         setError(t.landing.errRateLimited);
       } else if (err instanceof Error && err.message === "INVALID_PASSWORD") {
         setError(t.landing.errPasswordLength);
