@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install)",
+      "Bash(bun run dev)",
+      "Bash(bun run build)",
+      "Bash(bun run build:dev)",
+      "Bash(bun run preview)",
+      "Bash(bun run lint)",
+      "Bash(bun run format)",
+      "Bash(bunx tsc --noEmit)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

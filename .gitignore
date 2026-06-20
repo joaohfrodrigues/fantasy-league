@@ -28,6 +28,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Claude Code local overrides (keep .claude/settings.json tracked)
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
