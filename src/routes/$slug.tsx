@@ -1196,8 +1196,18 @@ function LeagueBoard() {
                 })}
                 {players.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="py-16 text-center text-muted-foreground">
-                      {t.board.noPlayers}
+                    <td colSpan={12} className="py-16 text-center">
+                      {unlocked ? (
+                        <button
+                          onClick={() => setAddingPlayer(true)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-pitch px-5 py-3 text-sm font-medium text-pitch-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+                        >
+                          <UserPlus className="size-4" />
+                          {t.board.addPlayersCta}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">{t.board.noPlayers}</span>
+                      )}
                     </td>
                   </tr>
                 )}

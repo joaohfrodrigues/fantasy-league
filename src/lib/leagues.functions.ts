@@ -253,8 +253,9 @@ export const createLeague = createServerFn({ method: "POST" })
       const rounds = dedupeRounds(Array.isArray(data?.rounds) ? data.rounds : []);
       const password = typeof data?.password === "string" ? data.password.trim() : "";
       if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
-      if (playerNames.length < 2 || playerNames.length > MAX_PLAYERS)
-        throw new Error("INVALID_PLAYERS");
+      // Players are optional at creation (10-second create flow): a league can
+      // start empty and have players added on the board. Only the upper bound matters.
+      if (playerNames.length > MAX_PLAYERS) throw new Error("INVALID_PLAYERS");
       if (rounds.length < MIN_ROUNDS || rounds.length > MAX_ROUNDS)
         throw new Error("INVALID_ROUNDS");
       if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD)) {

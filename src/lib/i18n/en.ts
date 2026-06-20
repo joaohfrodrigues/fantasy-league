@@ -70,6 +70,7 @@ export const en: Dict = {
     createPasswordLabel: "Password",
     createPasswordPlaceholder: "Leave empty to auto-generate",
     createPasswordHelp: "Optional. Use 8 to 64 characters.",
+    customizeLabel: "Add players & password (optional)",
     playersTitle: "Players",
     playerPlaceholder: (i: number) => `Player ${i + 1}`,
     templates: {
@@ -113,7 +114,6 @@ export const en: Dict = {
     recentRemove: "Remove from list",
 
     errNoName: "Give your league a name.",
-    errPlayers: "Add at least 2 players.",
     errRounds: "Add at least 1 round.",
     errPasswordLength: "Password must be 8 to 64 characters and not too simple.",
     errRateLimited: "Too many attempts right now. Please wait a moment and try again.",
@@ -266,6 +266,7 @@ export const en: Dict = {
     removePlayer: "Remove player",
     changeRoundPrizeEmoji: "Change round prize emoji",
     noPlayers: "No players yet.",
+    addPlayersCta: "Add the people in your league",
     footer: "Live editing · Odds of winning the prize simulated from the rounds played so far",
 
     sortBy: (col: string) => `Sort by ${col}`,
