@@ -55,6 +55,7 @@ import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
+import { assignBadges, type BadgeId } from "@/lib/badges";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -84,6 +85,13 @@ function tiebreakLabel(mode: string, t: Dict): string {
 }
 
 const PRIZE_EMOJIS = ["🍺", "🍷", "🧃", "☕", "🍽️", "🥇"];
+
+const BADGE_EMOJI: Record<BadgeId, string> = {
+  onFire: "🔥",
+  onRise: "📈",
+  bottler: "📉",
+  ghost: "👻",
+};
 
 function dinnerLabel(prob: number, n: number, t: Dict) {
   const fair = 1 / Math.max(n, 1);
@@ -348,6 +356,18 @@ function LeagueBoard() {
         roundMaxes: roundMaxById,
       }),
     [players, rounds, scoreOf, dinnerProb, tiebreak, roundMaxById],
+  );
+
+  // Round badges (see src/lib/badges.ts). Saved scores only — not What-if.
+  const badgesByPlayer = useMemo(
+    () =>
+      assignBadges({
+        players,
+        rounds,
+        score: (pid, rid) => scoreMap.get(`${pid}:${rid}`),
+        tiebreak,
+      }),
+    [players, rounds, scoreMap, tiebreak],
   );
 
   const standings = useMemo(() => {
@@ -1041,7 +1061,7 @@ function LeagueBoard() {
                       }`}
                       title={t.board.roundButtonTitle(played, r.name)}
                     >
-                      <Pencil className="size-3" />
+                      {r.locked_at ? <Lock className="size-3" /> : <Pencil className="size-3" />}
                       {r.short}
                     </button>
                   );
@@ -1163,6 +1183,16 @@ function LeagueBoard() {
                           <span className="font-display font-semibold text-base">
                             {row.player.name}
                           </span>
+                          {(badgesByPlayer.get(row.player.id) ?? []).map((bid) => (
+                            <span
+                              key={bid}
+                              className="text-sm leading-none"
+                              title={t.board.badges[bid]}
+                              aria-label={t.board.badges[bid]}
+                            >
+                              {BADGE_EMOJI[bid]}
+                            </span>
+                          ))}
                           {unlocked && (
                             <button
                               onClick={() => setRemovePlayerTarget(row.player)}

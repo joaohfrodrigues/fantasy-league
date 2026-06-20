@@ -71,6 +71,13 @@ What the single overall league winner takes at the end. The prize that Win
 probability estimates each player's chance of taking.
 _Avoid_: a bare "prize" when it could be confused with a Round prize.
 
+**Badge**:
+A derived, non-persisted per-player tag earned from round results — On Fire (a
+[[Round win]] streak), On the Rise / The Bottler (biggest rank move in the latest
+round), The Ghost (no points). Computed from saved scores only (never What-if) and
+not shown until at least two rounds are played.
+_Avoid_: award, achievement, trophy (Trophy/Round prize is the emoji token, distinct).
+
 ### Simulation & projection
 
 **Win probability**:
