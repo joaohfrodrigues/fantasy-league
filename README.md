@@ -1,6 +1,6 @@
 # Fantasy Tracker
 
-Fantasy Tracker started as a small tool for a group of friends to note down round-by-round results while estimating each participant's chances of winning the FIFA World Cup 2026 Fantasy league.
+Fantasy Tracker started as a small tool for a group of friends to note down round-by-round results while estimating each player's chances of winning the FIFA World Cup 2026 Fantasy league.
 
 The app was then generalized so anyone can use it for any soccer (football) fantasy league with custom players, custom rounds, and a shared edit password.
 
@@ -193,7 +193,7 @@ This repo solves a very specific social problem: keeping a fantasy league fun an
 
 It began with a World Cup 2026 fantasy league among friends, but the structure is flexible enough for any soccer fantasy competition where you want to:
 
-- define the participants
+- define the players
 - define the rounds
 - enter scores manually
 - keep a running table
