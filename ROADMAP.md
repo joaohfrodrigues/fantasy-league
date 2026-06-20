@@ -60,52 +60,104 @@ status table at the top once shipped.
 
 ## Epic backlog
 
-Larger future work, in proposed priority order. All items are **In Spec** until
-refined (see [Epic backlog states](#epic-backlog-states)).
+Larger future work, prioritized for **acquisition** (the product has no users yet),
+not depth for existing groups. See [Epic backlog states](#epic-backlog-states) for
+`In Spec` vs `Open`.
+
+**Product thesis:** this is not a fantasy _game_ — it's the **meta-layer over a
+friend group's existing game** (FPL, World Cup fantasy, office pools). The official
+platforms own scoring; they can't own a specific group's social, predictive, and
+accountability layer because they're global and anonymous. Every item must answer:
+_"why paste your scores here instead of just looking at the official table?"_
+
+**North-star:** new leagues created per week (viral reach), guardrailed by
+round-entry retention (a league still updated after round 3). Impact order for a
+zero-user product: **activation → viral loop → differentiated hook → retention depth.**
+
+**Identity:** stay login-free / no-accounts. Lean on `recent-leagues.ts`
+(device-local) as soft identity; add an optional, device-local "this is me" row-claim
+only where a feature needs personalization. Defer per-player PINs / accounts until a
+feature genuinely can't work device-local (record as an ADR then).
 
 > **Stack note:** despite the original framing, this is a **TanStack Start** app,
 > not Next.js. Any "API route" below is a TanStack Start server function
 > (`.functions.ts` / `.server.ts`) per [CLAUDE.md](CLAUDE.md). LLM calls, keys and
 > service-role access stay server-only.
 
-### Epic 2 — Tryout 2.0 & Analytics — `In Spec` _(priority 1)_
+### Epic A — Frictionless onboarding & creation scalability — `Open` _(priority 1)_
 
-Highest ROI / lowest risk: both tasks are pure functions with no external deps,
-building on existing `simulation.ts` / `standings.ts` / What-if (#4) code.
+The foundation for any growth. Mostly server + small UX; reuses existing code.
 
-- [ ] **Path to Victory engine** — `In Spec` — utility that computes the required
-      points-per-round a chasing player needs to catch the current leader. - Leader's projected final score: `E(L) = P_L + (A_L × R_rem)`. - Add a standard-deviation (σ) safety buffer to the leader's projection. - Compute the chaser's required average to beat the buffered projection.
-- [ ] **"Alternative Reality" toggle** — `In Spec` — frontend state utility to
-      hide/exclude specific past rounds (e.g. "What if Round 3 didn't happen?")
-      and dynamically recompute every player's `totalPoints` and `currentRank`
-      from the active rounds. Distinct from What-if (#4): this removes _played_
-      rounds rather than layering hypothetical _future_ scores.
+- [ ] **Per-client creation limits, no global cap** — `Open` — `createLeague`'s
+      in-memory `consumeWindowLimit("create-league", …)` uses one **global** key, so
+      all users share one creation budget, and `MAX_LEAGUES_TOTAL` hard-caps the whole
+      product. Move to a **per-IP** window and raise/remove the global total cap (keep
+      a generous per-IP/day cap for abuse). Files: `src/lib/leagues.functions.ts`,
+      `src/lib/rate-limit.server.ts`. Acceptance: two clients creating in parallel
+      don't throttle each other; no fixed product ceiling.
+- [ ] **10-second create flow** — `In Spec` — let creation succeed with just a name +
+      a template (players/rounds editable inline afterwards) instead of full setup up
+      front. Reuse `buildTemplateRounds` (`templates.ts`) and existing
+      add-player/add-round server fns. Example: "World Cup with friends" → one tap →
+      board ready.
+- [ ] **Instant join** — `In Spec` — viewing a shared link is already password-free;
+      add a clear "join / make picks" affordance plus the device-local row-claim.
+      Password stays required only to edit.
 
-### Epic 1 — The Social Engine — `In Spec` _(priority 2)_
+### Epic B — Viral share loop & shareable moments — `In Spec` _(priority 1)_
 
-Highest delight, heaviest infra (external LLM, cost, abuse + moderation risk).
-Reuses the abuse-guardrail pattern from league-creation caps. Weekly Badges is a
-cheap pure-util quick win that can ship independently of the AI banter.
+The growth engine: normal use should produce content worth dropping in the group
+chat, and every shared view should invite creating a new league.
 
-- [ ] **AI Banter server function** — `In Spec` — TanStack Start server function
-      (not a Next.js route) taking `currentLeagueState`, formatting a strict
-      system prompt, and calling a free-tier LLM (Gemini / Groq-Llama 3) acting as
-      a ruthless pundit: praise 1st, roast last, < 4 sentences. Must enforce a hard
-      call-rate cap to avoid free-tier overuse. Key stays server-only.
-- [ ] **Weekly badges utility** — `In Spec` — pure `assignWeeklyBadges(leagueState)`
-      attaching badges from the current round (e.g. "On Fire" = highest current
-      points, "The Bottler" = biggest rank drop, "The Ghost" = 0 total points).
+- [ ] **Auto OG images for league links** — `In Spec` — server-rendered Open Graph
+      image so a pasted link previews standings + leader in WhatsApp/iMessage.
+      Example: "🏆 Leader: Ana · Round 5/8".
+- [ ] **Shareable round-recap card** — `In Spec` — downloadable/shareable image after
+      each round: winner, biggest mover, AI banter line (Epic C), current odds.
+      Reuses `standings.ts` + `simulation.ts`; WhatsApp share target first.
+- [ ] **"Create your own league" CTA** — `In Spec` — persistent low-friction CTA on
+      shared/board views for viewers not yet in a league. Closes the loop A → B → A.
 
-### Epic 3 — Playstyles & H2H — `In Spec` _(priority 3)_
+### Epic C — AI Banter & narrative — `Open` _(priority 2)_
 
-Net-new feature surface; reuses the variance math established in Epic 2.
+The differentiated, most-shareable hook. Free-tier LLM, now — with hard caps.
 
-- [ ] **Playstyle archetype classifier** — `In Spec` — data-pipeline function over
-      a player's scoring history; uses moving average + standard deviation to assign
-      a tactical identity (high variance = "Liverpool Heavy Metal Attack",
-      low variance/steady = "Valencia Defensive Block").
-- [ ] **H2H matchup logic** — `In Spec` — let users compare themselves against any
-      other league player in a head-to-head view.
+- [ ] **AI Banter server function** — `Open` — TanStack Start server fn taking
+      `currentLeagueState`, strict system prompt, free-tier LLM (Gemini / Groq-Llama 3) as a ruthless pundit: praise 1st, roast last, < 4 sentences. **Server-only
+      key**; **hard per-league + global rate cap** (reuse the league-creation
+      abuse-guardrail pattern); cache the line per round. Degrades to templated badges
+      when capped or on failure. Feeds the recap card (Epic B).
+- [ ] **Round badges** — `Open` — pure `assignBadges(leagueState)`: "On Fire" (top
+      current round), "The Bottler" (biggest rank drop), "The Ghost" (0 total). No
+      external deps; ships independently; feeds the recap card. Builds on `standings.ts`.
+
+### Epic D — Signature predictive analytics — `In Spec` _(priority 3)_
+
+Retention depth — "insight the official app never shows." Pure, builds on the new
+modules; sequenced after the viral loop.
+
+- [ ] **Path to Victory engine** — `In Spec` — points-per-round a chasing player needs
+      to catch the buffered leader: leader's projection `E(L) = P_L + (A_L × R_rem)`
+      plus a σ safety buffer, then the chaser's required average. Pure util on
+      `simulation.ts` internals.
+- [ ] **"Alternative Reality" toggle** — `In Spec` — exclude specific _played_ rounds
+      and recompute totals/ranks via `computeStandings` / `simulateWinProbability` on
+      a filtered round set. Distinct from What-if (#4), which layers hypothetical
+      _future_ scores.
+
+### Epic E — Playstyles, H2H & legacy — `In Spec` _(priority 4)_
+
+Net-new surfaces; sequenced last. H2H is league-level, so it does not block on the
+identity decision.
+
+- [ ] **Playstyle archetype classifier** — `In Spec` — moving average + σ over a
+      player's history → tactical identity (high variance = "Heavy Metal Attack",
+      steady = "Defensive Block"). Pure pipeline; also a shareable artifact.
+- [ ] **H2H matchup view** — `In Spec` — compare any two players head-to-head (record,
+      per-round deltas). League-level; no accounts needed.
+- [ ] **Season legacy / archive** — `In Spec` — when a league finishes, snapshot a
+      read-only "season" and let the group start a new season under the same link,
+      building an all-time record / hall of fame. Reuses the export snapshot shape.
 
 ## Notes
 
