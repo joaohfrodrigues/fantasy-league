@@ -312,6 +312,7 @@ export const pt = {
     addPlayerPlaceholder: "Nome",
     addPlayersTitle: "Adicionar jogadores",
     playersLabel: "Jogadores",
+    errDuplicateInBatch: "Inseriste o mesmo nome mais do que uma vez.",
     errDuplicatePlayer: "Um ou mais desses jogadores já existem.",
     errTooManyPlayers: "Isso excederia o limite de jogadores.",
     errAddPlayers: "Não foi possível adicionar jogadores. Tenta novamente.",

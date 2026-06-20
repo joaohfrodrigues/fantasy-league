@@ -418,6 +418,21 @@ function LeagueBoard() {
     const names = playerDraft.map((n) => n.trim()).filter(Boolean);
     if (!names.length || !password) return;
     setAddPlayersError(null);
+
+    // Reject duplicates within this submission (case-insensitive).
+    const lower = names.map((n) => n.toLowerCase());
+    if (lower.some((n, i) => lower.indexOf(n) !== i)) {
+      setAddPlayersError(t.board.errDuplicateInBatch);
+      return;
+    }
+    // Reject names already in the league (case-insensitive). The server's unique
+    // constraint is the final guard against races between load and submit.
+    const existing = new Set(players.map((p) => p.name.trim().toLowerCase()));
+    if (lower.some((n) => existing.has(n))) {
+      setAddPlayersError(t.board.errDuplicatePlayer);
+      return;
+    }
+
     try {
       await addPlayersFn({ data: { slug, password, names } });
       setPlayerDraft(["", ""]);

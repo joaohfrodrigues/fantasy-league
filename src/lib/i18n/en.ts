@@ -306,6 +306,7 @@ export const en: Dict = {
     addPlayerPlaceholder: "Name",
     addPlayersTitle: "Add players",
     playersLabel: "Players",
+    errDuplicateInBatch: "You've entered the same name more than once.",
     errDuplicatePlayer: "One or more of those players already exist.",
     errTooManyPlayers: "That would exceed the player limit.",
     errAddPlayers: "Couldn't add players. Please try again.",
