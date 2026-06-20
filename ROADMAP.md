@@ -125,9 +125,11 @@ The differentiated, most-shareable hook. Free-tier LLM, now — with hard caps.
       key**; **hard per-league + global rate cap** (reuse the league-creation
       abuse-guardrail pattern); cache the line per round. Degrades to templated badges
       when capped or on failure. Feeds the recap card (Epic B).
-- [ ] **Round badges** — `Open` — pure `assignBadges(leagueState)`: "On Fire" (top
-      current round), "The Bottler" (biggest rank drop), "The Ghost" (0 total). No
-      external deps; ships independently; feeds the recap card. Builds on `standings.ts`.
+- [x] **Round badges** — ✅ shipped — pure `assignBadges` in `src/lib/badges.ts`:
+      🔥 On Fire (won the last 2+ rounds in a row), 📈 On the Rise / 📉 The Bottler
+      (biggest rank move in the latest round), 👻 The Ghost (no points). Saved scores
+      only, hidden until ≥2 rounds played; inline chips on the standings row. Builds on
+      `standings.ts`; covered by `badges.test.ts`. Feeds the future recap card.
 
 ### Epic D — Signature predictive analytics — `In Spec` _(priority 3)_
 

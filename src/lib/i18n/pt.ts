@@ -316,6 +316,12 @@ export const pt = {
     errDuplicatePlayer: "Um ou mais desses jogadores já existem.",
     errTooManyPlayers: "Isso excederia o limite de jogadores.",
     errAddPlayers: "Não foi possível adicionar jogadores. Tenta novamente.",
+    badges: {
+      onFire: "Em Chamas — venceu as últimas 2+ rondas seguidas",
+      onRise: "Em Ascensão — maior subida nesta ronda",
+      bottler: "Em Queda — maior descida nesta ronda",
+      ghost: "O Fantasma — ainda sem pontos",
+    },
     passwordPrompt: "Introduz a palavra-passe da liga para editar os pontos.",
     passwordPlaceholder: "Palavra-passe",
     passwordWrong: "Palavra-passe incorreta.",

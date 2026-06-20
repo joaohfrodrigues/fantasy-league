@@ -310,6 +310,12 @@ export const en: Dict = {
     errDuplicatePlayer: "One or more of those players already exist.",
     errTooManyPlayers: "That would exceed the player limit.",
     errAddPlayers: "Couldn't add players. Please try again.",
+    badges: {
+      onFire: "On Fire — won the last 2+ rounds in a row",
+      onRise: "On the Rise — biggest climb this round",
+      bottler: "The Bottler — biggest drop this round",
+      ghost: "The Ghost — no points yet",
+    },
     passwordPrompt: "Enter the league password to edit the scores.",
     passwordPlaceholder: "Password",
     passwordWrong: "Incorrect password.",
