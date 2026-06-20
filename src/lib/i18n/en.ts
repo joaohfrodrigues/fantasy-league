@@ -117,7 +117,6 @@ export const en: Dict = {
     errRounds: "Add at least 1 round.",
     errPasswordLength: "Password must be 8 to 64 characters and not too simple.",
     errRateLimited: "Too many attempts right now. Please wait a moment and try again.",
-    errLeagueCapacity: "New league creation is temporarily unavailable. Please try again later.",
     errCreate: "Couldn't create the league. Please try again.",
 
     createdTitle: "League created!",

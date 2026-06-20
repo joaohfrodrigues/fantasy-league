@@ -18,10 +18,15 @@ const SLUG_RETRIES = 6;
 const MIN_PASSWORD = 8;
 const MAX_PASSWORD = 64;
 
+// Per-IP burst limit (in-memory): one client can't spam creation. Note this is
+// process-local, so on serverless it only bounds a single instance — the global
+// hourly DB cap below is the cross-instance backstop.
 const CREATE_LEAGUE_LIMIT_WINDOW_MS = 60_000;
 const CREATE_LEAGUE_MAX_PER_WINDOW = 6;
-const DEFAULT_MAX_LEAGUES_TOTAL = 10_000;
-const DEFAULT_MAX_LEAGUES_PER_HOUR = 120;
+// Global hourly creation backstop (DB-counted) so storage can't grow unbounded if
+// the in-memory per-IP limit is bypassed or instances don't share memory. Kept
+// generous so it is not a realistic growth ceiling; tune via MAX_LEAGUES_PER_HOUR.
+const DEFAULT_MAX_LEAGUES_PER_HOUR = 1000;
 
 export type CreateLeagueResult = {
   slug: string;
@@ -86,6 +91,21 @@ function getEnvInt(name: string, fallback: number): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+// Best-effort client IP for per-client rate limiting. Behind Vercel the real
+// client is the first entry of x-forwarded-for. Falls back to a shared bucket
+// when unavailable (still bounded by the global hourly backstop).
+async function getClientIp(): Promise<string> {
+  try {
+    const { getRequestHeaders } = await import("@tanstack/react-start/server");
+    const headers = getRequestHeaders();
+    const forwarded = headers.get("x-forwarded-for");
+    if (forwarded) return forwarded.split(",")[0]!.trim();
+    return headers.get("x-real-ip")?.trim() || "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 type AdminClient = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
@@ -253,8 +273,10 @@ export const createLeague = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<CreateLeagueResult> => {
     const { consumeWindowLimit } = await import("./rate-limit.server");
+    // Per-IP burst limit so one client can't spam creation without throttling others.
+    const ip = await getClientIp();
     const createRetryMs = consumeWindowLimit(
-      "create-league",
+      `create-league:${ip}`,
       CREATE_LEAGUE_MAX_PER_WINDOW,
       CREATE_LEAGUE_LIMIT_WINDOW_MS,
     );
@@ -263,25 +285,18 @@ export const createLeague = createServerFn({ method: "POST" })
     const admin = await getAdmin();
     const { generateSlug, generatePassword, hashPassword } = await import("./crypto.server");
 
-    // DB-backed guardrails so storage cannot grow unbounded even if in-memory
-    // limits are bypassed or multiple server instances are running.
-    const maxLeaguesTotal = getEnvInt("MAX_LEAGUES_TOTAL", DEFAULT_MAX_LEAGUES_TOTAL);
+    // Cross-instance abuse backstop: cap creations product-wide per hour (DB-counted)
+    // so storage can't grow unbounded if the per-IP limit is bypassed or instances
+    // don't share memory. No fixed total ceiling — the product can grow without bound.
     const maxLeaguesPerHour = getEnvInt("MAX_LEAGUES_PER_HOUR", DEFAULT_MAX_LEAGUES_PER_HOUR);
     const oneHourAgoIso = new Date(Date.now() - 60 * 60_000).toISOString();
 
-    const [
-      { count: totalLeagueCount, error: totalCountErr },
-      { count: hourLeagueCount, error: hourCountErr },
-    ] = await Promise.all([
-      admin.from("leagues").select("id", { count: "exact", head: true }),
-      admin
-        .from("leagues")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", oneHourAgoIso),
-    ]);
+    const { count: hourLeagueCount, error: hourCountErr } = await admin
+      .from("leagues")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", oneHourAgoIso);
 
-    if (totalCountErr || hourCountErr) throw new Error("DB_ERROR");
-    if ((totalLeagueCount ?? 0) >= maxLeaguesTotal) throw new Error("LEAGUE_CAP_REACHED");
+    if (hourCountErr) throw new Error("DB_ERROR");
     if ((hourLeagueCount ?? 0) >= maxLeaguesPerHour) throw new Error("RATE_LIMITED");
 
     // Find a free slug.
