@@ -93,11 +93,11 @@ The foundation for any growth. Mostly server + small UX; reuses existing code.
       global `MAX_LEAGUES_TOTAL` ceiling is removed, and a raised global hourly DB cap
       (`MAX_LEAGUES_PER_HOUR`, default 1000) remains as a cross-instance backstop.
       Covered by `src/lib/rate-limit.test.ts` (per-client isolation + exhaustion).
-- [ ] **10-second create flow** — `In Spec` — let creation succeed with just a name +
-      a template (players/rounds editable inline afterwards) instead of full setup up
-      front. Reuse `buildTemplateRounds` (`templates.ts`) and existing
-      add-player/add-round server fns. Example: "World Cup with friends" → one tap →
-      board ready.
+- [x] **10-second create flow** — ✅ shipped — create with just a name + template;
+      players & password collapsed under an optional "Customize" disclosure. Server
+      accepts 0 players; the creator's password is persisted on create so they land on
+      the board **unlocked**, where a zero-player empty state shows an "add players"
+      CTA. Reuses `buildTemplateRounds` and the board's add-player flow.
 - [ ] **Instant join** — `In Spec` — viewing a shared link is already password-free;
       add a clear "join / make picks" affordance plus the device-local row-claim.
       Password stays required only to edit.

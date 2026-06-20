@@ -253,8 +253,9 @@ export const createLeague = createServerFn({ method: "POST" })
       const rounds = dedupeRounds(Array.isArray(data?.rounds) ? data.rounds : []);
       const password = typeof data?.password === "string" ? data.password.trim() : "";
       if (!name || name.length > MAX_NAME) throw new Error("INVALID_NAME");
-      if (playerNames.length < 2 || playerNames.length > MAX_PLAYERS)
-        throw new Error("INVALID_PLAYERS");
+      // Players are optional at creation (10-second create flow): a league can
+      // start empty and have players added on the board. Only the upper bound matters.
+      if (playerNames.length > MAX_PLAYERS) throw new Error("INVALID_PLAYERS");
       if (rounds.length < MIN_ROUNDS || rounds.length > MAX_ROUNDS)
         throw new Error("INVALID_ROUNDS");
       if (password && (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD)) {
@@ -467,6 +468,55 @@ export const addPlayer = createServerFn({ method: "POST" })
       newValues: { name: data.name, display_order: order },
     });
     return { id: inserted.id };
+  });
+
+/** Add multiple players at once (requires the password). */
+export const addPlayers = createServerFn({ method: "POST" })
+  .inputValidator((data: { slug: string; password: string; names: string[] }) => {
+    const names = dedupeNonEmpty(Array.isArray(data?.names) ? data.names : []);
+    if (names.length === 0 || names.some((n) => n.length > MAX_NAME))
+      throw new Error("INVALID_NAME");
+    return { slug: clean(data?.slug), password: String(data?.password ?? ""), names };
+  })
+  .handler(async ({ data }): Promise<{ count: number }> => {
+    const admin = await getAdmin();
+    const leagueId = await authorize(admin, data.slug, data.password);
+
+    const { count } = await admin
+      .from("players")
+      .select("id", { count: "exact", head: true })
+      .eq("league_id", leagueId);
+    if ((count ?? 0) + data.names.length > MAX_PLAYERS) throw new Error("TOO_MANY_PLAYERS");
+
+    const { data: last } = await admin
+      .from("players")
+      .select("display_order")
+      .eq("league_id", leagueId)
+      .order("display_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let order = (last?.display_order ?? 0) + 1;
+    const rows = data.names.map((name) => ({ league_id: leagueId, name, display_order: order++ }));
+
+    const { data: inserted, error } = await admin
+      .from("players")
+      .insert(rows)
+      .select("id, name, display_order");
+    if (error) {
+      if (error.code === "23505") throw new Error("DUPLICATE_PLAYER");
+      throw new Error("DB_ERROR");
+    }
+    for (const p of inserted ?? []) {
+      await writeAuditLog(admin, {
+        leagueId,
+        entityType: "player",
+        action: "INSERT",
+        recordId: p.id,
+        oldValues: null,
+        newValues: { name: p.name, display_order: p.display_order },
+      });
+    }
+    return { count: inserted?.length ?? 0 };
   });
 
 // --- Remove player ------------------------------------------------------------

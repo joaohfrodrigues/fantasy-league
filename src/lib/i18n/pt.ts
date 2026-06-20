@@ -71,6 +71,7 @@ export const pt = {
     createPasswordLabel: "Palavra-passe",
     createPasswordPlaceholder: "Deixa vazio para gerar automaticamente",
     createPasswordHelp: "Opcional. Usa entre 8 e 64 caracteres.",
+    customizeLabel: "Adicionar jogadores e palavra-passe (opcional)",
     playersTitle: "Jogadores",
     playerPlaceholder: (i: number) => `Jogador ${i + 1}`,
     templates: {
@@ -114,7 +115,6 @@ export const pt = {
     recentRemove: "Remover da lista",
 
     errNoName: "Dá um nome à liga.",
-    errPlayers: "Adiciona pelo menos 2 jogadores.",
     errRounds: "Adiciona pelo menos 1 ronda.",
     errPasswordLength:
       "A palavra-passe deve ter entre 8 e 64 caracteres e não ser demasiado simples.",
@@ -271,6 +271,7 @@ export const pt = {
     removePlayer: "Remover jogador",
     changeRoundPrizeEmoji: "Mudar emoji do premio da ronda",
     noPlayers: "Sem jogadores ainda.",
+    addPlayersCta: "Adiciona os jogadores da tua liga",
     footer:
       "Edição em tempo real · Probabilidade de ganhar o prémio simulada com base nas rondas já jogadas",
 
@@ -309,6 +310,12 @@ export const pt = {
     infoFaq2: "Ganha simplesmente quem tem mais pontos.",
 
     addPlayerPlaceholder: "Nome",
+    addPlayersTitle: "Adicionar jogadores",
+    playersLabel: "Jogadores",
+    errDuplicateInBatch: "Inseriste o mesmo nome mais do que uma vez.",
+    errDuplicatePlayer: "Um ou mais desses jogadores já existem.",
+    errTooManyPlayers: "Isso excederia o limite de jogadores.",
+    errAddPlayers: "Não foi possível adicionar jogadores. Tenta novamente.",
     passwordPrompt: "Introduz a palavra-passe da liga para editar os pontos.",
     passwordPlaceholder: "Palavra-passe",
     passwordWrong: "Palavra-passe incorreta.",

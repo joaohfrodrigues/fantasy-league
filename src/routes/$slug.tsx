@@ -35,7 +35,7 @@ import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/
 import { LanguageToggle } from "@/components/LanguageToggle";
 import {
   verifyLeaguePassword,
-  addPlayer as addPlayerFn,
+  addPlayers as addPlayersFn,
   removePlayer as removePlayerFn,
   updateLeagueName as updateLeagueNameFn,
   addRound as addRoundFn,
@@ -52,6 +52,7 @@ import {
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
+import { EditableList } from "@/components/EditableList";
 import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
@@ -123,7 +124,8 @@ function LeagueBoard() {
 
   const [editing, setEditing] = useState<string | null>(null);
   const [addingPlayer, setAddingPlayer] = useState(false);
-  const [newPlayerName, setNewPlayerName] = useState("");
+  const [playerDraft, setPlayerDraft] = useState<string[]>(["", ""]);
+  const [addPlayersError, setAddPlayersError] = useState<string | null>(null);
   const [editingLeagueName, setEditingLeagueName] = useState(false);
   const [creatingRound, setCreatingRound] = useState(false);
   const [creatingRoundSave, setCreatingRoundSave] = useState(false);
@@ -163,6 +165,14 @@ function LeagueBoard() {
   useEffect(() => {
     setPassword(localStorage.getItem(pwKey));
   }, [pwKey]);
+
+  // Reset the add-players draft each time the modal opens.
+  useEffect(() => {
+    if (addingPlayer) {
+      setPlayerDraft(["", ""]);
+      setAddPlayersError(null);
+    }
+  }, [addingPlayer]);
 
   const loadAll = useCallback(async () => {
     const { data: lg } = await supabase
@@ -404,16 +414,40 @@ function LeagueBoard() {
     };
   }, [rounds, players, simMap]);
 
-  async function addPlayer() {
-    const name = newPlayerName.trim();
-    if (!name || !password) return;
+  async function addPlayers() {
+    const names = playerDraft.map((n) => n.trim()).filter(Boolean);
+    if (!names.length || !password) return;
+    setAddPlayersError(null);
+
+    // Reject duplicates within this submission (case-insensitive).
+    const lower = names.map((n) => n.toLowerCase());
+    if (lower.some((n, i) => lower.indexOf(n) !== i)) {
+      setAddPlayersError(t.board.errDuplicateInBatch);
+      return;
+    }
+    // Reject names already in the league (case-insensitive). The server's unique
+    // constraint is the final guard against races between load and submit.
+    const existing = new Set(players.map((p) => p.name.trim().toLowerCase()));
+    if (lower.some((n) => existing.has(n))) {
+      setAddPlayersError(t.board.errDuplicatePlayer);
+      return;
+    }
+
     try {
-      await addPlayerFn({ data: { slug, password, name } });
-      setNewPlayerName("");
+      await addPlayersFn({ data: { slug, password, names } });
+      setPlayerDraft(["", ""]);
       setAddingPlayer(false);
       loadAll();
     } catch (err) {
-      if (isAuthError(err)) handleAuthFailure();
+      if (isAuthError(err)) {
+        handleAuthFailure();
+      } else if (err instanceof Error && err.message === "DUPLICATE_PLAYER") {
+        setAddPlayersError(t.board.errDuplicatePlayer);
+      } else if (err instanceof Error && err.message === "TOO_MANY_PLAYERS") {
+        setAddPlayersError(t.board.errTooManyPlayers);
+      } else {
+        setAddPlayersError(t.board.errAddPlayers);
+      }
     }
   }
 
@@ -1196,8 +1230,18 @@ function LeagueBoard() {
                 })}
                 {players.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="py-16 text-center text-muted-foreground">
-                      {t.board.noPlayers}
+                    <td colSpan={12} className="py-16 text-center">
+                      {unlocked ? (
+                        <button
+                          onClick={() => setAddingPlayer(true)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-pitch px-5 py-3 text-sm font-medium text-pitch-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+                        >
+                          <UserPlus className="size-4" />
+                          {t.board.addPlayersCta}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">{t.board.noPlayers}</span>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -1293,15 +1337,19 @@ function LeagueBoard() {
       )}
 
       {addingPlayer && unlocked && (
-        <Modal onClose={() => setAddingPlayer(false)} title={t.board.addPlayer}>
-          <input
-            autoFocus
-            value={newPlayerName}
-            onChange={(e) => setNewPlayerName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addPlayer()}
-            placeholder={t.board.addPlayerPlaceholder}
-            className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+        <Modal onClose={() => setAddingPlayer(false)} title={t.board.addPlayersTitle}>
+          <EditableList
+            title={t.board.playersLabel}
+            items={playerDraft}
+            placeholder={() => t.board.addPlayerPlaceholder}
+            onChange={(i, v) => setPlayerDraft((l) => l.map((x, idx) => (idx === i ? v : x)))}
+            onAdd={() => setPlayerDraft((l) => [...l, ""])}
+            onRemove={(i) => setPlayerDraft((l) => l.filter((_, idx) => idx !== i))}
+            minItems={1}
           />
+          {addPlayersError && (
+            <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-3">{addPlayersError}</p>
+          )}
           <div className="flex justify-end gap-2 mt-5">
             <button
               onClick={() => setAddingPlayer(false)}
@@ -1310,8 +1358,9 @@ function LeagueBoard() {
               {t.common.cancel}
             </button>
             <button
-              onClick={addPlayer}
-              className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90"
+              onClick={addPlayers}
+              disabled={!playerDraft.some((n) => n.trim())}
+              className="px-4 py-2 text-sm rounded-lg bg-pitch text-pitch-foreground font-medium shadow-glow hover:opacity-90 disabled:opacity-50"
             >
               {t.common.add}
             </button>

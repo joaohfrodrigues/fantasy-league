@@ -12,6 +12,8 @@ import {
   KeyRound,
   LineChart,
   History,
+  Settings2,
+  ChevronDown,
 } from "lucide-react";
 import { createLeague, type CreateLeagueResult } from "@/lib/leagues.functions";
 import {
@@ -26,6 +28,7 @@ import {
   KNOCKOUT_DEFAULT_DEPTH,
 } from "@/lib/templates";
 import { getRecentLeagues, removeRecentLeague, type RecentLeague } from "@/lib/recent-leagues";
+import { EditableList } from "@/components/EditableList";
 import { useT, getDict, type Locale } from "@/lib/i18n";
 import { resolveLocale } from "@/lib/locale.functions";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -83,6 +86,7 @@ function Landing() {
   const [created, setCreated] = useState<CreateLeagueResult | null>(null);
   const [openCode, setOpenCode] = useState("");
   const [password, setPassword] = useState("");
+  const [showCustomize, setShowCustomize] = useState(false);
 
   function updateAt(list: string[], idx: number, value: string) {
     return list.map((v, i) => (i === idx ? value : v));
@@ -95,10 +99,6 @@ function Landing() {
     const cleanRounds = buildTemplateRounds(templateId, t, { leagueRounds, knockoutDepth });
     if (!cleanName) {
       setError(t.landing.errNoName);
-      return;
-    }
-    if (cleanPlayers.length < 2) {
-      setError(t.landing.errPlayers);
       return;
     }
     if (cleanRounds.length < 1) {
@@ -120,6 +120,14 @@ function Landing() {
           password: password || undefined,
         },
       });
+      // Persist the password for this league so the creator lands on the board
+      // already unlocked and can add players immediately (no re-entry). The board
+      // reads this key on mount; matches `league:${slug}:pw` in $slug.tsx.
+      try {
+        localStorage.setItem(`league:${result.slug}:pw`, result.password);
+      } catch {
+        // localStorage unavailable (private mode); creator can still unlock manually.
+      }
       setCreated(result);
     } catch (err) {
       console.error("createLeague failed:", err);
@@ -248,31 +256,6 @@ function Landing() {
             className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 mb-6"
           />
 
-          <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
-            {t.landing.createPasswordLabel}
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t.landing.createPasswordPlaceholder}
-            maxLength={MAX_PASSWORD}
-            className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
-          />
-          <p className="text-xs text-muted-foreground mt-2 mb-6">{t.landing.createPasswordHelp}</p>
-
-          <EditableList
-            title={t.landing.playersTitle}
-            items={players}
-            placeholder={(i) => t.landing.playerPlaceholder(i)}
-            onChange={(i, v) => setPlayers((l) => updateAt(l, i, v))}
-            onAdd={() => setPlayers((l) => [...l, ""])}
-            onRemove={(i) => setPlayers((l) => l.filter((_, idx) => idx !== i))}
-            minItems={2}
-          />
-
-          <div className="h-5" />
-
           <TemplateSelector
             templateId={templateId}
             onSelect={setTemplateId}
@@ -281,6 +264,49 @@ function Landing() {
             knockoutDepth={knockoutDepth}
             onKnockoutDepth={setKnockoutDepth}
           />
+
+          {/* Optional setup: players and password can be added now or later on the board. */}
+          <button
+            type="button"
+            onClick={() => setShowCustomize((v) => !v)}
+            aria-expanded={showCustomize}
+            className="mt-5 w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Settings2 className="size-4" />
+            <span className="font-medium">{t.landing.customizeLabel}</span>
+            <ChevronDown
+              className={`size-4 ml-auto transition-transform ${showCustomize ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {showCustomize && (
+            <div className="mt-4 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+              <EditableList
+                title={t.landing.playersTitle}
+                items={players}
+                placeholder={(i) => t.landing.playerPlaceholder(i)}
+                onChange={(i, v) => setPlayers((l) => updateAt(l, i, v))}
+                onAdd={() => setPlayers((l) => [...l, ""])}
+                onRemove={(i) => setPlayers((l) => l.filter((_, idx) => idx !== i))}
+                minItems={0}
+              />
+
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                  {t.landing.createPasswordLabel}
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t.landing.createPasswordPlaceholder}
+                  maxLength={MAX_PASSWORD}
+                  className="w-full bg-input border border-border rounded-lg px-4 py-3 text-base outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
+                />
+                <p className="text-xs text-muted-foreground mt-2">{t.landing.createPasswordHelp}</p>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-[color:oklch(0.7_0.2_25)] mt-5">{error}</p>}
 
@@ -539,63 +565,6 @@ function TemplateSizeField({
         >
           <Plus className="size-4" aria-hidden="true" />
         </button>
-      </div>
-    </div>
-  );
-}
-
-function EditableList({
-  title,
-  items,
-  placeholder,
-  onChange,
-  onAdd,
-  onRemove,
-  minItems,
-}: {
-  title: string;
-  items: readonly string[];
-  placeholder: (i: number) => string;
-  onChange: (i: number, v: string) => void;
-  onAdd: () => void;
-  onRemove: (i: number) => void;
-  minItems: number;
-}) {
-  const t = useT();
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          {title}
-        </label>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex items-center gap-1 text-xs text-pitch hover:opacity-80"
-        >
-          <Plus className="size-3.5" /> {t.common.add}
-        </button>
-      </div>
-      <div className="space-y-2">
-        {items.map((value, i) => (
-          <div key={i} className="flex gap-2">
-            <input
-              value={value}
-              onChange={(e) => onChange(i, e.target.value)}
-              placeholder={placeholder(i)}
-              className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20"
-            />
-            <button
-              type="button"
-              onClick={() => onRemove(i)}
-              disabled={items.length <= minItems}
-              className="px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30"
-              aria-label={t.common.remove}
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        ))}
       </div>
     </div>
   );
