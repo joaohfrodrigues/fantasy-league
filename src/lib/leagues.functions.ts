@@ -7,6 +7,7 @@
 // them would leak the service-role key / hashing code.
 import { createServerFn } from "@tanstack/react-start";
 import type { Json } from "@/integrations/supabase/types";
+import { TIEBREAKS } from "@/lib/standings";
 
 const MAX_NAME = 80;
 const MAX_SHORT = 8;
@@ -826,13 +827,11 @@ export const unlockRound = createServerFn({ method: "POST" })
 
 // --- League tie-break rule -----------------------------------------------------
 
-const TIEBREAK_VALUES = ["total", "wins", "latest"];
-
 /** Update the league's tie-break rule (requires the password). */
 export const updateTiebreak = createServerFn({ method: "POST" })
   .inputValidator((data: { slug: string; password: string; tiebreak: string }) => {
     const tiebreak = clean(data?.tiebreak);
-    if (!TIEBREAK_VALUES.includes(tiebreak)) throw new Error("INVALID_TIEBREAK");
+    if (!(TIEBREAKS as readonly string[]).includes(tiebreak)) throw new Error("INVALID_TIEBREAK");
     return {
       slug: clean(data?.slug),
       password: String(data?.password ?? ""),
