@@ -52,6 +52,8 @@ import {
 } from "@/lib/leagues.functions";
 import { useT, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
+import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
+import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -70,43 +72,14 @@ type Round = {
 type Player = { id: string; name: string; display_order: number; drink: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
 
-const SCORE_MIN = -10;
-const SCORE_MAX = 150;
-
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-// Tie-break rule for players level on total points. Always total first, then the
-// configured rule. Kept in sync with the DB CHECK constraint on leagues.tiebreak.
-type TiebreakMode = "total" | "wins" | "latest";
-const TIEBREAKS: TiebreakMode[] = ["total", "wins", "latest"];
-
-type RankMetrics = { agg: number; wins: number; latest: number };
 type RoundDetailsInput = { name: string; short: string };
-
-// Order two players for league rank; higher is better. Returns <0 when `a`
-// should rank above `b`.
-function compareRank(a: RankMetrics, b: RankMetrics, mode: TiebreakMode): number {
-  if (a.agg !== b.agg) return b.agg - a.agg;
-  if (mode === "wins" && a.wins !== b.wins) return b.wins - a.wins;
-  if (mode === "latest" && a.latest !== b.latest) return b.latest - a.latest;
-  return 0;
-}
 
 function tiebreakLabel(mode: string, t: Dict): string {
   if (mode === "wins") return t.board.tiebreakWins;
   if (mode === "latest") return t.board.tiebreakLatest;
   return t.board.tiebreakTotal;
-}
-
-// Small deterministic PRNG (mulberry32) so the simulation is reproducible.
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 const PRIZE_EMOJIS = ["🍺", "🍷", "🧃", "☕", "🍽️", "🥇"];
@@ -337,141 +310,35 @@ function LeagueBoard() {
     return m;
   }, [rounds]);
 
-  const roundMaxById = useMemo(() => {
-    const m = new Map<string, number>();
-    rounds.forEach((r) => {
-      let max = Number.NEGATIVE_INFINITY;
-      players.forEach((p) => {
-        const v = simMap.get(`${p.id}:${r.id}`);
-        if (typeof v === "number" && v > max) max = v;
-      });
-      if (max !== Number.NEGATIVE_INFINITY) m.set(r.id, max);
-    });
-    return m;
-  }, [rounds, players, simMap]);
+  const scoreOf = useCallback(
+    (playerId: string, roundId: string) => simMap.get(`${playerId}:${roundId}`),
+    [simMap],
+  );
 
-  const leagueStats = useMemo(() => {
-    const all: number[] = [];
-    roundsPlayedIds.forEach((rid) => {
-      players.forEach((p) => {
-        const v = simMap.get(`${p.id}:${rid}`);
-        if (typeof v === "number") all.push(v);
-      });
-    });
-    if (!all.length) return { mean: 70, std: 35 };
-    const mean = all.reduce((a, b) => a + b, 0) / all.length;
-    const variance = all.reduce((a, b) => a + (b - mean) ** 2, 0) / all.length;
-    return { mean, std: Math.max(20, Math.sqrt(variance)) };
-  }, [simMap, players, roundsPlayedIds]);
+  const roundMaxById = useMemo(
+    () => computeRoundMaxes(players, rounds, scoreOf),
+    [players, rounds, scoreOf],
+  );
 
-  const playerMean = useMemo(() => {
-    const m = new Map<string, number>();
-    players.forEach((p) => {
-      const vals = roundsPlayedIds
-        .map((rid) => simMap.get(`${p.id}:${rid}`))
-        .filter((v): v is number => typeof v === "number");
-      m.set(p.id, vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : leagueStats.mean);
-    });
-    return m;
-  }, [players, simMap, roundsPlayedIds, leagueStats]);
+  // Monte Carlo win probability (see src/lib/simulation.ts).
+  const dinnerProb = useMemo(
+    () => simulateWinProbability({ players, rounds, score: scoreOf }),
+    [players, rounds, scoreOf],
+  );
 
-  // Monte Carlo: probability each player ends FIRST (wins, gets dinner paid)
-  const dinnerProb = useMemo(() => {
-    const counts = new Map<string, number>();
-    players.forEach((p) => counts.set(p.id, 0));
-    if (!players.length) return counts;
-
-    const PRIOR_K = 3;
-
-    const currentTotals = players.map((p) => {
-      let t = 0;
-      let n = 0;
-      rounds.forEach((r) => {
-        const v = simMap.get(`${p.id}:${r.id}`);
-        if (typeof v === "number") {
-          t += v;
-          n += 1;
-        }
-      });
-      const rawMean = playerMean.get(p.id) ?? leagueStats.mean;
-      const projMean = (rawMean * n + leagueStats.mean * PRIOR_K) / (n + PRIOR_K);
-      const skillSD = leagueStats.std / Math.sqrt(n + PRIOR_K);
-      return { id: p.id, total: t, projMean, skillSD };
-    });
-
-    if (roundsRemaining === 0) {
-      const max = Math.max(...currentTotals.map((c) => c.total));
-      const winners = currentTotals.filter((c) => c.total === max);
-      winners.forEach((w) => counts.set(w.id, 1 / winners.length));
-      return counts;
-    }
-
-    // Deterministic seed from the current data so probabilities don't flicker
-    // between renders (same inputs -> same output).
-    let seed = (0x9e3779b9 ^ roundsRemaining) >>> 0;
-    for (const c of currentTotals) {
-      seed = (Math.imul(seed, 31) + Math.round(c.total) + Math.round(c.projMean * 1000)) >>> 0;
-    }
-    const rand = mulberry32(seed);
-    const randn = () => {
-      const u = rand() || 1e-9;
-      const v = rand() || 1e-9;
-      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-    };
-
-    // Antithetic variates: each pair of trials reuses the negated normals to
-    // cancel sampling swings, cutting variance for roughly the same work.
-    const PAIRS = 3000;
-    const perTrial = currentTotals.length * (1 + roundsRemaining);
-    const z = new Float64Array(perTrial);
-
-    const runTrial = (sign: number) => {
-      let bestId = currentTotals[0].id;
-      let bestTotal = -Infinity;
-      let k = 0;
-      for (const c of currentTotals) {
-        const level = c.projMean + sign * z[k++] * c.skillSD;
-        let sim = c.total;
-        for (let r = 0; r < roundsRemaining; r++) {
-          sim += clamp(level + sign * z[k++] * leagueStats.std, SCORE_MIN, SCORE_MAX);
-        }
-        if (sim > bestTotal) {
-          bestTotal = sim;
-          bestId = c.id;
-        }
-      }
-      counts.set(bestId, (counts.get(bestId) ?? 0) + 1);
-    };
-
-    for (let t = 0; t < PAIRS; t++) {
-      for (let i = 0; i < perTrial; i++) z[i] = randn();
-      runTrial(1);
-      runTrial(-1);
-    }
-    const samples = PAIRS * 2;
-    const out = new Map<string, number>();
-    counts.forEach((v, k) => out.set(k, v / samples));
-    return out;
-  }, [players, simMap, playerMean, leagueStats, roundsRemaining, rounds]);
-
-  const baseStandings = useMemo(() => {
-    const rows = players.map((p) => {
-      const perRound = rounds.map((r) => simMap.get(`${p.id}:${r.id}`) ?? null);
-      const agg = perRound.reduce<number>((a, v) => a + (v ?? 0), 0);
-      const wins = rounds.reduce((acc, r, idx) => {
-        const max = roundMaxById.get(r.id);
-        const mine = perRound[idx];
-        return max !== undefined && mine !== null && mine === max ? acc + 1 : acc;
-      }, 0);
-      const prob = dinnerProb.get(p.id) ?? 0;
-      return { player: p, perRound, agg, wins, prob };
-    });
-
-    // League rank is always determined by total, independent of the display sort.
-    const rankMap = new Map<string, number>();
-    [...rows].sort((a, b) => b.agg - a.agg).forEach((r, i) => rankMap.set(r.player.id, i + 1));
-    return rows.map((r) => ({ ...r, rank: rankMap.get(r.player.id) ?? 0 }));
-  }, [players, simMap, dinnerProb, rounds, roundMaxById]);
+  // Standings with the league's tiebreak applied to rank (see src/lib/standings.ts).
+  const baseStandings = useMemo(
+    () =>
+      computeStandings({
+        players,
+        rounds,
+        score: scoreOf,
+        winProbability: dinnerProb,
+        tiebreak,
+        roundMaxes: roundMaxById,
+      }),
+    [players, rounds, scoreOf, dinnerProb, tiebreak, roundMaxById],
+  );
 
   const standings = useMemo(() => {
     const withRank = [...baseStandings];
