@@ -31,13 +31,14 @@ export const en: Dict = {
 
   landing: {
     metaTitle: "Fantasy Tracker",
-    metaDescription: "Track your fantasy leagues. Live odds, round prizes and your league history.",
+    metaDescription:
+      "The scoreboard for your group's fantasy league — live odds of winning, round prizes and badges. No account, just share a link.",
     brandSubtitle: "Track your fantasy leagues · Share the link · See who wins the prize",
     heroEyebrow: "Fantasy Tracker",
     heroTitleA: "Create your tracker",
     heroTitleB: "and see who eats for free",
     heroSubtitle:
-      "Track your fantasy league round by round. You get a link to share and a password to edit scores — with live standings and each player's odds of winning the prize.",
+      "Track your group's fantasy league round by round — live standings, each player's odds of winning the prize, and badges for the round's heroes and villains. No account: just share the link.",
     heroCta: "Create your tracker",
     heroFootnote: "* Dinner is just an example — your league can play for any prize.",
 
@@ -61,7 +62,8 @@ export const en: Dict = {
     },
 
     createTitle: "Create a league tracker",
-    createSubtitle: "Name it after your competition, add the players and the rounds.",
+    createSubtitle: "Name it, pick a format, and you're set — add players right on the board.",
+    noSignup: "No account · Free · Just share a link",
     setupEyebrow: "Get started",
     setupTitle: "Create your league",
     setupSubtitle: "Set up your tracker in seconds, or open one that already exists.",

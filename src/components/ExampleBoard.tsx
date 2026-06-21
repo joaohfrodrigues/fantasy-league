@@ -1,6 +1,8 @@
 import { FlaskConical } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useInView, useCountUp } from "@/hooks/use-animations";
+import { BADGE_EMOJI } from "@/components/badge-emoji";
+import type { BadgeId } from "@/lib/badges";
 
 // Static, read-only sample standings shown on the landing page so new users can
 // see what the tracker looks like. No live data, no simulation, no editing.
@@ -11,15 +13,16 @@ type DemoPlayer = {
   tier: 1 | 2 | 3 | 4 | 5;
   prob: number;
   scores: number[];
+  badges: BadgeId[];
 };
 
 const DEMO_ROUND_SHORTS = ["MD1", "MD2", "MD3"];
 
 const DEMO_PLAYERS: DemoPlayer[] = [
-  { name: "Ana", drink: "🍺", tier: 2, prob: 0.58, scores: [80, 102, 95] },
-  { name: "Carla", drink: "🧃", tier: 3, prob: 0.24, scores: [72, 90, 100] },
-  { name: "Bruno", drink: "🍷", tier: 4, prob: 0.15, scores: [98, 76, 84] },
-  { name: "Diogo", drink: "☕", tier: 5, prob: 0.03, scores: [60, 81, 70] },
+  { name: "Ana", drink: "🍺", tier: 2, prob: 0.58, scores: [80, 102, 95], badges: ["onFire"] },
+  { name: "Carla", drink: "🧃", tier: 3, prob: 0.24, scores: [72, 90, 100], badges: ["onRise"] },
+  { name: "Bruno", drink: "🍷", tier: 4, prob: 0.15, scores: [98, 76, 84], badges: ["bottler"] },
+  { name: "Diogo", drink: "☕", tier: 5, prob: 0.03, scores: [60, 81, 70], badges: [] },
 ];
 
 const DINNER_EMOJI: Record<number, string> = { 1: "🍗", 2: "😋", 3: "🤞", 4: "😬", 5: "💸" };
@@ -129,7 +132,19 @@ export function ExampleBoard() {
                       )}
                     </td>
                     <td className="py-4 align-top">
-                      <span className="font-display font-semibold text-base">{row.name}</span>
+                      <span className="inline-flex items-center gap-1.5 flex-wrap">
+                        <span className="font-display font-semibold text-base">{row.name}</span>
+                        {row.badges.map((bid) => (
+                          <span
+                            key={bid}
+                            className="text-sm leading-none"
+                            title={t.board.badges[bid]}
+                            aria-label={t.board.badges[bid]}
+                          >
+                            {BADGE_EMOJI[bid]}
+                          </span>
+                        ))}
+                      </span>
                       <div className="text-xs text-muted-foreground mt-1 md:hidden">
                         <span className="mr-1">{emoji}</span>
                         {label} · {pct}%
