@@ -55,7 +55,8 @@ import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
-import { assignBadges, type BadgeId } from "@/lib/badges";
+import { assignBadges } from "@/lib/badges";
+import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -85,13 +86,6 @@ function tiebreakLabel(mode: string, t: Dict): string {
 }
 
 const PRIZE_EMOJIS = ["🍺", "🍷", "🧃", "☕", "🍽️", "🥇"];
-
-const BADGE_EMOJI: Record<BadgeId, string> = {
-  onFire: "🔥",
-  onRise: "📈",
-  bottler: "📉",
-  ghost: "👻",
-};
 
 function dinnerLabel(prob: number, n: number, t: Dict) {
   const fair = 1 / Math.max(n, 1);

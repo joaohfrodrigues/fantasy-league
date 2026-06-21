@@ -38,12 +38,23 @@ export const Route = createFileRoute("/")({
   loader: async (): Promise<{ locale: Locale }> => ({ locale: await resolveLocale() }),
   head: ({ loaderData }) => {
     const t = getDict(loaderData?.locale ?? "pt");
+    // Absolute URL is required for link-preview crawlers. Set VITE_SITE_URL to the
+    // canonical origin (e.g. https://your-domain) in the deploy env; without it the
+    // image falls back to a relative path (works on some platforms, not all).
+    const site = import.meta.env.VITE_SITE_URL ?? "";
+    const ogImage = `${site}/icons/icon-512.png`;
     return {
       meta: [
         { title: t.landing.metaTitle },
         { name: "description", content: t.landing.metaDescription },
         { property: "og:title", content: t.landing.metaTitle },
         { property: "og:description", content: t.landing.metaDescription },
+        { property: "og:image", content: ogImage },
+        ...(site ? [{ property: "og:url", content: site }] : []),
+        { name: "twitter:card", content: "summary" },
+        { name: "twitter:title", content: t.landing.metaTitle },
+        { name: "twitter:description", content: t.landing.metaDescription },
+        { name: "twitter:image", content: ogImage },
       ],
     };
   },
@@ -318,6 +329,7 @@ function Landing() {
             {creating && <Loader2 className="size-4 animate-spin" />}
             {t.landing.createButton}
           </button>
+          <p className="mt-3 text-center text-xs text-muted-foreground">{t.landing.noSignup}</p>
         </div>
 
         {/* Open existing league */}

@@ -32,13 +32,13 @@ export const pt = {
   landing: {
     metaTitle: "Fantasy Tracker",
     metaDescription:
-      "Acompanha as tuas ligas fantasy. Probabilidades ao vivo, prémios por ronda e o histórico das tuas ligas.",
+      "O placar da liga fantasy do teu grupo — probabilidades de vitória ao vivo, prémios por ronda e badges. Sem conta, basta partilhar um link.",
     brandSubtitle: "Acompanha as tuas ligas fantasy · Partilha o link · Vê quem ganha o prémio",
     heroEyebrow: "Tracker de ligas fantasy",
     heroTitleA: "Cria o teu tracker",
     heroTitleB: "e vê quem janta à pala",
     heroSubtitle:
-      "Acompanha a tua liga fantasy ronda a ronda. Recebes um link para partilhar e uma palavra-passe para editar os pontos — com classificação ao vivo e a probabilidade de cada um ganhar o prémio.",
+      "Acompanha a liga fantasy do teu grupo ronda a ronda — classificação ao vivo, a probabilidade de cada um ganhar o prémio e badges para os heróis e vilões da ronda. Sem conta: basta partilhar o link.",
     heroCta: "Cria o teu tracker",
     heroFootnote: "* Jantar é só um exemplo — a tua liga pode jogar por qualquer prémio.",
 
@@ -62,7 +62,9 @@ export const pt = {
     },
 
     createTitle: "Criar tracker",
-    createSubtitle: "Dá-lhe o nome da tua competição, adiciona os jogadores e as rondas.",
+    createSubtitle:
+      "Dá-lhe um nome, escolhe um formato e está feito — adiciona jogadores no próprio quadro.",
+    noSignup: "Sem conta · Grátis · Basta partilhar o link",
     setupEyebrow: "Começar",
     setupTitle: "Cria a tua liga",
     setupSubtitle: "Monta o teu tracker em segundos ou abre uma liga que já exista.",
