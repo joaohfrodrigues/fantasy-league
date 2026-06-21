@@ -2,7 +2,7 @@ import { FlaskConical } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useInView, useCountUp } from "@/hooks/use-animations";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
-import type { BadgeId } from "@/lib/badges";
+import { assignBadges } from "@/lib/badges";
 
 // Static, read-only sample standings shown on the landing page so new users can
 // see what the tracker looks like. No live data, no simulation, no editing.
@@ -13,17 +13,31 @@ type DemoPlayer = {
   tier: 1 | 2 | 3 | 4 | 5;
   prob: number;
   scores: number[];
-  badges: BadgeId[];
 };
 
 const DEMO_ROUND_SHORTS = ["MD1", "MD2", "MD3"];
 
+// Scores chosen so the real badge logic produces a clear spread: Ana wins MD2+MD3
+// (On Fire), Carla climbs on the last round (On the Rise), Bruno slips (The Bottler).
 const DEMO_PLAYERS: DemoPlayer[] = [
-  { name: "Ana", drink: "🍺", tier: 2, prob: 0.58, scores: [80, 102, 95], badges: ["onFire"] },
-  { name: "Carla", drink: "🧃", tier: 3, prob: 0.24, scores: [72, 90, 100], badges: ["onRise"] },
-  { name: "Bruno", drink: "🍷", tier: 4, prob: 0.15, scores: [98, 76, 84], badges: ["bottler"] },
-  { name: "Diogo", drink: "☕", tier: 5, prob: 0.03, scores: [60, 81, 70], badges: [] },
+  { name: "Ana", drink: "🍺", tier: 2, prob: 0.58, scores: [80, 102, 100] },
+  { name: "Carla", drink: "🧃", tier: 3, prob: 0.24, scores: [72, 90, 95] },
+  { name: "Bruno", drink: "🍷", tier: 4, prob: 0.15, scores: [98, 76, 70] },
+  { name: "Diogo", drink: "☕", tier: 5, prob: 0.03, scores: [60, 81, 65] },
 ];
+
+// Badges come from the real assignBadges over the demo data — never hardcoded, so
+// the showcase always matches the live behaviour.
+const DEMO_BADGES = assignBadges({
+  players: DEMO_PLAYERS.map((p) => ({ id: p.name })),
+  rounds: DEMO_ROUND_SHORTS.map((short) => ({ id: short })),
+  score: (pid, rid) => {
+    const p = DEMO_PLAYERS.find((x) => x.name === pid);
+    const idx = DEMO_ROUND_SHORTS.indexOf(rid);
+    return p && idx >= 0 ? p.scores[idx] : undefined;
+  },
+  tiebreak: "total",
+});
 
 const DINNER_EMOJI: Record<number, string> = { 1: "🍗", 2: "😋", 3: "🤞", 4: "😬", 5: "💸" };
 
@@ -134,7 +148,7 @@ export function ExampleBoard() {
                     <td className="py-4 align-top">
                       <span className="inline-flex items-center gap-1.5 flex-wrap">
                         <span className="font-display font-semibold text-base">{row.name}</span>
-                        {row.badges.map((bid) => (
+                        {(DEMO_BADGES.get(row.name) ?? []).map((bid) => (
                           <span
                             key={bid}
                             className="text-sm leading-none"
