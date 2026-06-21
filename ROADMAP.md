@@ -5,32 +5,55 @@ done work; the **Epic backlog** holds only remaining work. When a task ships, it
 moves to the Shipped table (with its PR) and leaves the backlog; when all of an
 epic's tasks ship, the epic leaves the backlog.
 
+**Priority** (value): `High` · `Medium` · `Low`. **Size** (effort): `S` (one short
+session, single area), `M` (pure module + tests + UI wiring, one surface), `L` (new
+infra / external deps, or spans multiple surfaces). Priority and size are
+independent — a `Low`/`S` item can be a worthwhile quick win.
+
 ## Shipped
 
-| #   | Feature                                | Notes                                                                                                                                                                                                                                                             |
-| --- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Round lock (with confirmation)         | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                                                                                                                |
-| 2   | League-level edit history              | Audit logging for scores, lock/unlock, player add/remove, round add/delete, prize changes; `getAuditLog` + read-only history viewer in the board.                                                                                                                 |
-| 3   | JSON snapshot export (import deferred) | `exportLeague` returns a versioned JSON snapshot. `importLeague` exists but is intentionally not exposed — user uploads judged too risky, so export-only. See [ADR 0002](docs/adr/0002-export-only-no-import-ui.md).                                              |
-| 4   | What-if mode                           | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced). Never persisted.                                                                                                                |
-| 5   | Custom tie-break rules                 | Per-league `tiebreak` (total / most round wins / best latest round); applied to standings ranks and the prize split, audited, edited via a selector when unlocked.                                                                                                |
-| 6   | Deep Standings & Simulation modules    | Extracted `standings.ts` (tiebreak-aware ranking) + `simulation.ts` (Monte Carlo win probability) as tested pure modules; rank now honours the tiebreak. ([#2](https://github.com/joaohfrodrigues/fantasy-league/pull/2))                                         |
-| 7   | Per-IP creation limits, no global cap  | Epic A. `createLeague` keys the burst window per-IP; removed the global `MAX_LEAGUES_TOTAL` ceiling; raised hourly DB backstop. `rate-limit.test.ts`. ([#4](https://github.com/joaohfrodrigues/fantasy-league/pull/4))                                            |
-| 8   | 10-second create flow                  | Epic A. Create with name + template; players/password optional under "Customize"; 0-player leagues; creator lands unlocked; add-players CTA + bulk add with duplicate guards. ([#5](https://github.com/joaohfrodrigues/fantasy-league/pull/5))                    |
-| 9   | Round badges                           | Epic C. `assignBadges` (`src/lib/badges.ts`): On Fire / On the Rise / Bottler / Ghost; saved scores only, ≥2 rounds; inline chips. Editor round chips show a lock when locked. `badges.test.ts`. ([#6](https://github.com/joaohfrodrigues/fantasy-league/pull/6)) |
+| #   | Feature                                | Notes                                                                                                                                                                                                                                  |
+| --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Round lock (with confirmation)         | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                                                                                     |
+| 2   | League-level edit history              | Audit logging for scores, lock/unlock, player add/remove, round add/delete, prize changes; `getAuditLog` + read-only history viewer in the board.                                                                                      |
+| 3   | JSON snapshot export (import deferred) | `exportLeague` returns a versioned JSON snapshot. `importLeague` exists but is intentionally not exposed — user uploads judged too risky, so export-only. See [ADR 0002](docs/adr/0002-export-only-no-import-ui.md).                   |
+| 4   | What-if mode                           | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced). Never persisted.                                                                                     |
+| 5   | Custom tie-break rules                 | Per-league `tiebreak` (total / most round wins / best latest round); applied to standings ranks and the prize split, audited, edited via a selector when unlocked.                                                                     |
+| 6   | Deep Standings & Simulation modules    | Extracted `standings.ts` (tiebreak-aware ranking) + `simulation.ts` (Monte Carlo win probability) as tested pure modules; rank now honours the tiebreak. ([#2](https://github.com/joaohfrodrigues/fantasy-league/pull/2))              |
+| 7   | Per-IP creation limits, no global cap  | `createLeague` keys the burst window per-IP; removed the global `MAX_LEAGUES_TOTAL` ceiling; raised hourly DB backstop. `rate-limit.test.ts`. ([#4](https://github.com/joaohfrodrigues/fantasy-league/pull/4))                         |
+| 8   | 10-second create flow                  | Create with name + template; players/password optional under "Customize"; 0-player leagues; creator lands unlocked; add-players CTA + bulk add with duplicate guards. ([#5](https://github.com/joaohfrodrigues/fantasy-league/pull/5)) |
+| 9   | Round badges                           | `assignBadges` (`src/lib/badges.ts`): On Fire / On the Rise / Bottler / Ghost; saved scores only, ≥2 rounds; inline chips. `badges.test.ts`. ([#6](https://github.com/joaohfrodrigues/fantasy-league/pull/6))                          |
+| 10  | Landing quick wins                     | Demo badges from real logic, sharper copy, no-signup proof, OG/Twitter image tags (`VITE_SITE_URL`). ([#7](https://github.com/joaohfrodrigues/fantasy-league/pull/7), [#8](https://github.com/joaohfrodrigues/fantasy-league/pull/8))  |
+| 11  | Desktop score steppers                 | The −/+ steppers (previously mobile-only) now also show on desktop: slider + arrows + free text on desktop, arrows + free text on mobile. Reuses the clamped `stepValue`.                                                              |
 
 ## Backlog / Future
 
-- [ ] **Rename `drink` → `round_prize`** (tech debt) — the per-player win-token
-      column is named `drink` for legacy reasons but the concept is a Round prize
-      (see CONTEXT.md). Migration + update `players` type, `setDrink`/`DrinkCell`,
-      audit `entityType: "drink"`, and `exportLeague`/`importLeague` snapshot keys.
-      Keep export snapshot back-compat (accept old `drink` key on read).
-- [ ] **What-if slider** — replace per-round score entry in What-if mode with one
-      slider per player over their **expected average** future score, defaulting to
-      the player's current average. The slider sets the _mean_ only; the Monte Carlo
-      simulation still samples around it using that player's observed round-to-round
-      variance (fall back to a sensible default variance when few rounds are played).
+Standalone items (smaller than an epic). Tagged `priority · size`.
+
+- [ ] **Lock-aware board visuals** — `Medium · M` — distinguish _live_ metrics from
+      _record_ metrics by round lock state (today every view recomputes from all
+      scores as edited). **Live (unchanged):** total points and the win-probability
+      simulation keep recomputing from all rounds. **Record (locked only):** badges
+      and round prizes (the per-player win tally) count locked rounds only, so a
+      result counts toward the record once its round is finalized. **Lock visibility:**
+      round lock state shown to all users (viewers + editors), not just editor chips
+      (supersedes the earlier editor-only decision), and must work on **mobile** (round
+      columns are hidden there). Touches `assignBadges` (needs a `locked` signal →
+      ripples into `badges.test.ts` and the landing demo), the prize/`wins` count in
+      `standings.ts` (locked-only, while total stays all-rounds), and the board lock
+      indicator. Needs a grilling pass for the mobile lock UX and the edge case of a
+      round win in an unlocked round (shown in the grid, not yet tallied).
+- [ ] **Rename `drink` → `round_prize`** — `Low · M` — the per-player win-token column
+      is named `drink` for legacy reasons but the concept is a Round prize (see
+      CONTEXT.md). DB migration + update `players` type, `setDrink`/`DrinkCell`, audit
+      `entityType: "drink"`, and `exportLeague`/`importLeague` snapshot keys. Keep
+      export snapshot back-compat (accept the old `drink` key on read). Own PR — it
+      touches production data.
+- [ ] **What-if slider** — `Low · M` — replace per-round score entry in What-if mode
+      with one slider per player over their **expected average** future score,
+      defaulting to the player's current average. The slider sets the _mean_ only; the
+      Monte Carlo simulation still samples around it using that player's observed
+      round-to-round variance (fall back to a sensible default when few rounds played).
       Do **not** feed the slider value as a constant per future round — that would
       flatten win probability toward 0%/100% and defeat the simulation. The What-if
       concept is unchanged (hypothetical, never persisted); only the input changes.
@@ -38,10 +61,9 @@ epic's tasks ship, the epic leaves the backlog.
 
 ## Epic backlog
 
-Larger future work, prioritized for **acquisition** (the product has no users yet),
-not depth for existing groups.
-
-Each Epic and Task carries one of two states:
+Larger thematic work, prioritized for **acquisition** (the product has no users yet),
+not depth for existing groups. Tasks are tagged `size`; epics carry a `priority` and a
+state:
 
 - **In Spec** — captured but not yet refined. Needs a clear goal and concrete
   examples before it can be picked up. Do **not** implement directly.
@@ -63,78 +85,74 @@ zero-user product: **activation → viral loop → differentiated hook → reten
 
 **Identity:** stay login-free / no-accounts. Lean on `recent-leagues.ts`
 (device-local) as soft identity; add an optional, device-local "this is me" row-claim
-only where a feature needs personalization. Defer per-player PINs / accounts until a
-feature genuinely can't work device-local (record as an ADR then).
+only where a feature needs personalization — it rides into the highest-priority epic
+that needs it (currently Epic B). Defer per-player PINs / accounts until a feature
+genuinely can't work device-local (record as an ADR then).
 
 > **Stack note:** despite the original framing, this is a **TanStack Start** app,
 > not Next.js. Any "API route" below is a TanStack Start server function
 > (`.functions.ts` / `.server.ts`) per [CLAUDE.md](CLAUDE.md). LLM calls, keys and
 > service-role access stay server-only.
 
-### Epic A — Frictionless onboarding & creation scalability — `In Spec` _(priority 1)_
-
-Foundation for growth. The creation-scalability and fast-create slices have shipped
-(Shipped #7, #8); one task remains.
-
-- [ ] **Instant join** — `In Spec` — viewing a shared link is already password-free;
-      add a clear "join / make picks" affordance plus the device-local row-claim.
-      Password stays required only to edit. (Note: "make picks" doesn't map to the
-      shared-editor model — narrow to the row-claim during refinement.)
-
-### Epic B — Viral share loop & shareable moments — `In Spec` _(priority 1)_
+### Epic B — Viral share loop & narrative — `High` · `Open`
 
 The growth engine: normal use should produce content worth dropping in the group
-chat, and every shared view should invite creating a new league.
+chat, and every shared view should invite creating a new league. Sequence within the
+epic: league-level card first → personal share + row-claim → AI banter.
 
-- [ ] **Auto OG images for league links** — `In Spec` — server-rendered Open Graph
-      image so a pasted link previews standings + leader in WhatsApp/iMessage.
-      Example: "🏆 Leader: Ana · Round 5/8".
-- [ ] **Shareable round-recap card** — `In Spec` — downloadable/shareable image after
-      each round: winner, biggest mover, badge, current odds. Reuses `standings.ts` +
-      `simulation.ts` + `badges.ts`; WhatsApp share target first.
-- [ ] **"Create your own league" CTA** — `In Spec` — persistent low-friction CTA on
-      shared/board views for viewers not yet in a league. Closes the loop A → B → A.
+- [ ] **Auto OG images for league links** — `M` — server-rendered Open Graph image so
+      a pasted link previews standings + leader in WhatsApp/iMessage (dynamic
+      `@vercel/og`-style; upgrades the static landing image already shipped). Example:
+      "🏆 Leader: Ana · Round 5/8".
+- [ ] **Shareable round-recap card** — `M` — downloadable/shareable image after each
+      round: winner, biggest mover, badge, current odds. Reuses `standings.ts` +
+      `simulation.ts` + `badges.ts`; templated banter line as the fallback. WhatsApp
+      share target first.
+- [ ] **Personal share + row-claim** — `M` — a personal "share your odds/standing"
+      artifact (_"I've got a 58% chance 🔥"_) — more screenshot-worthy than a league
+      table. Introduces the device-local "this is me" row-claim (highlights your row;
+      reused later by D/E).
+- [ ] **AI banter line** — `L` — TanStack Start server fn taking `currentLeagueState`,
+      strict system prompt, free-tier LLM (Gemini / Groq-Llama 3) as a ruthless pundit:
+      praise 1st, roast last, < 4 sentences. **Server-only key**; **hard per-league +
+      global rate cap** (reuse the league-creation abuse-guardrail pattern); cache per
+      round. Degrades to the templated/badge line when capped or on failure. Feeds the
+      recap card. (Folded in from the former Social Engine epic; badges already shipped.)
 
-### Epic C — AI Banter & narrative — `Open` _(priority 2)_
-
-The differentiated, most-shareable hook. Free-tier LLM, now — with hard caps. Round
-badges (the no-deps quick win) have shipped (Shipped #9); the AI banter remains.
-
-- [ ] **AI Banter server function** — `Open` — TanStack Start server fn taking
-      `currentLeagueState`, strict system prompt, free-tier LLM (Gemini / Groq-Llama 3)
-      as a ruthless pundit: praise 1st, roast last, < 4 sentences. **Server-only
-      key**; **hard per-league + global rate cap** (reuse the league-creation
-      abuse-guardrail pattern); cache the line per round. Degrades to the shipped
-      badges when capped or on failure. Feeds the recap card (Epic B).
-
-### Epic D — Signature predictive analytics — `In Spec` _(priority 3)_
+### Epic D — Signature predictive analytics — `Medium` · `Open`
 
 Retention depth — "insight the official app never shows." Pure, builds on the new
 modules; sequenced after the viral loop.
 
-- [ ] **Path to Victory engine** — `In Spec` — points-per-round a chasing player needs
-      to catch the buffered leader: leader's projection `E(L) = P_L + (A_L × R_rem)`
-      plus a σ safety buffer, then the chaser's required average. Pure util on
+- [ ] **Path to Victory engine** — `M` — points-per-round a chasing player needs to
+      catch the buffered leader: leader's projection `E(L) = P_L + (A_L × R_rem)` plus
+      a σ safety buffer, then the chaser's required average. Computed **generally** (any
+      chaser vs. the leader); the row-claim only _highlights_ "yours". Pure util on
       `simulation.ts` internals.
-- [ ] **"Alternative Reality" toggle** — `In Spec` — exclude specific _played_ rounds
-      and recompute totals/ranks via `computeStandings` / `simulateWinProbability` on
-      a filtered round set. Distinct from What-if (#4), which layers hypothetical
-      _future_ scores.
+- [ ] **"Alternative Reality" toggle** — `M` — exclude specific _played_ rounds and
+      recompute totals/ranks via `computeStandings` / `simulateWinProbability` on a
+      filtered round set. Distinct from What-if (#4), which layers hypothetical _future_
+      scores.
 
-### Epic E — Playstyles, H2H & legacy — `In Spec` _(priority 4)_
+### Epic E — Playstyles, H2H & legacy — `Low` · `In Spec`
 
-Net-new surfaces; sequenced last. H2H is league-level, so it does not block on the
-identity decision.
+Net-new surfaces; sequenced last. Not ready to build — each task needs refinement.
 
-- [ ] **Playstyle archetype classifier** — `In Spec` — moving average + σ over a
-      player's history → tactical identity (high variance = "Heavy Metal Attack",
-      steady = "Defensive Block"). Pure pipeline; also a shareable artifact.
-- [ ] **H2H matchup view** — `In Spec` — compare any two players head-to-head (record,
-      per-round deltas). League-level; no accounts needed.
-- [ ] **Season legacy / archive** — `In Spec` — when a league finishes, snapshot a
-      read-only "season" and let the group start a new season under the same link,
-      building an all-time record / hall of fame. Reuses the export snapshot shape.
+- [ ] **Playstyle archetype classifier** — `M` — moving average + σ over a player's
+      history → tactical identity (high variance = "Heavy Metal Attack", steady =
+      "Defensive Block"). Pure pipeline; may later feed Epic B's shareables. Needs
+      threshold definitions.
+- [ ] **H2H matchup view** — `M` — compare any two players head-to-head (record,
+      per-round deltas). League-level; no accounts needed (row-claim only highlights
+      "you"). Needs scope (which stats).
+- [ ] **Season legacy / archive** — `L` — **premature** (no users, no completed
+      seasons yet). When a league finishes, snapshot a read-only "season" and let the
+      group start a new season under the same link, building an all-time record / hall
+      of fame. Reuses the export snapshot shape. Revisit once leagues are completing.
 
 ## Notes
 
 - Audit history is league-level only (no per-editor identity) by design.
+- **Dropped epics:** _Frictionless onboarding_ (its slices shipped as #7/#8; the
+  row-claim folded into Epic B) and _Social Engine_ (badges shipped as #9; AI banter
+  folded into Epic B).

@@ -2592,71 +2592,62 @@ function RowInput({
     onChange(String(clamp(current + delta, SCORE_MIN, SCORE_MAX)));
   };
 
+  // The −/+ stepper (arrows + free text). Shown on both desktop and mobile; the
+  // slider is added before it on desktop only.
+  const stepper = (
+    <div className="shrink-0 flex items-center rounded-lg border border-border bg-input focus-within:border-pitch focus-within:ring-2 focus-within:ring-pitch/20">
+      <button
+        type="button"
+        aria-label="Decrease"
+        onClick={() => stepValue(-1)}
+        disabled={disabled || (numeric ?? 0) <= SCORE_MIN}
+        className="flex h-9 w-9 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      >
+        <Minus className="size-4" aria-hidden="true" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => {
+          const next = parseDraftPoints(e.target.value);
+          if (next === null && e.target.value.trim() !== "") return;
+          onChange(next === null ? "" : String(next));
+        }}
+        placeholder="0"
+        disabled={disabled}
+        className="w-12 border-x border-border bg-transparent py-1.5 text-center text-sm font-mono tabular-nums outline-none disabled:opacity-50"
+        aria-label={name}
+      />
+      <button
+        type="button"
+        aria-label="Increase"
+        onClick={() => stepValue(1)}
+        disabled={disabled || (numeric ?? 0) >= SCORE_MAX}
+        className="flex h-9 w-9 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+      >
+        <Plus className="size-4" aria-hidden="true" />
+      </button>
+    </div>
+  );
+
   return (
     <>
       <div className="font-display text-sm font-medium py-1.5">{name}</div>
       <div className="flex items-center justify-end gap-2">
-        <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
-          <input
-            type="range"
-            min={SCORE_MIN}
-            max={SCORE_MAX}
-            step={1}
-            value={sliderValue}
-            onChange={(e) => onChange(e.currentTarget.value)}
-            disabled={disabled}
-            className="flex-1 min-w-0 accent-[oklch(0.84_0.18_168)] disabled:opacity-50"
-            aria-label={name}
-          />
-          <input
-            type="text"
-            inputMode="numeric"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={(e) => {
-              const next = parseDraftPoints(e.target.value);
-              if (next === null && e.target.value.trim() !== "") return;
-              onChange(next === null ? "" : String(next));
-            }}
-            placeholder="0"
-            disabled={disabled}
-            className="bg-input border border-border rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-pitch focus:ring-2 focus:ring-pitch/20 w-16 disabled:opacity-50"
-          />
-        </div>
-        <div className="md:hidden shrink-0 flex items-center rounded-lg border border-border bg-input focus-within:border-pitch focus-within:ring-2 focus-within:ring-pitch/20">
-          <button
-            type="button"
-            aria-label="Decrease"
-            onClick={() => stepValue(-1)}
-            disabled={disabled || (numeric ?? 0) <= SCORE_MIN}
-            className="flex h-9 w-9 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-          >
-            <Minus className="size-4" aria-hidden="true" />
-          </button>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={(e) => {
-              const next = parseDraftPoints(e.target.value);
-              if (next === null && e.target.value.trim() !== "") return;
-              onChange(next === null ? "" : String(next));
-            }}
-            placeholder="0"
-            disabled={disabled}
-            className="w-12 border-x border-border bg-transparent py-1.5 text-center text-sm font-mono tabular-nums outline-none disabled:opacity-50"
-          />
-          <button
-            type="button"
-            aria-label="Increase"
-            onClick={() => stepValue(1)}
-            disabled={disabled || (numeric ?? 0) >= SCORE_MAX}
-            className="flex h-9 w-9 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-          >
-            <Plus className="size-4" aria-hidden="true" />
-          </button>
-        </div>
+        <input
+          type="range"
+          min={SCORE_MIN}
+          max={SCORE_MAX}
+          step={1}
+          value={sliderValue}
+          onChange={(e) => onChange(e.currentTarget.value)}
+          disabled={disabled}
+          className="hidden md:block flex-1 min-w-0 accent-[oklch(0.84_0.18_168)] disabled:opacity-50"
+          aria-label={name}
+        />
+        {stepper}
         <button
           type="button"
           onClick={() => onChange("")}
