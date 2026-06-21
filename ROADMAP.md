@@ -12,37 +12,25 @@ independent — a `Low`/`S` item can be a worthwhile quick win.
 
 ## Shipped
 
-| #   | Feature                                | Notes                                                                                                                                                                                                                                  |
-| --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Round lock (with confirmation)         | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                                                                                     |
-| 2   | League-level edit history              | Audit logging for scores, lock/unlock, player add/remove, round add/delete, prize changes; `getAuditLog` + read-only history viewer in the board.                                                                                      |
-| 3   | JSON snapshot export (import deferred) | `exportLeague` returns a versioned JSON snapshot. `importLeague` exists but is intentionally not exposed — user uploads judged too risky, so export-only. See [ADR 0002](docs/adr/0002-export-only-no-import-ui.md).                   |
-| 4   | What-if mode                           | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced). Never persisted.                                                                                     |
-| 5   | Custom tie-break rules                 | Per-league `tiebreak` (total / most round wins / best latest round); applied to standings ranks and the prize split, audited, edited via a selector when unlocked.                                                                     |
-| 6   | Deep Standings & Simulation modules    | Extracted `standings.ts` (tiebreak-aware ranking) + `simulation.ts` (Monte Carlo win probability) as tested pure modules; rank now honours the tiebreak. ([#2](https://github.com/joaohfrodrigues/fantasy-league/pull/2))              |
-| 7   | Per-IP creation limits, no global cap  | `createLeague` keys the burst window per-IP; removed the global `MAX_LEAGUES_TOTAL` ceiling; raised hourly DB backstop. `rate-limit.test.ts`. ([#4](https://github.com/joaohfrodrigues/fantasy-league/pull/4))                         |
-| 8   | 10-second create flow                  | Create with name + template; players/password optional under "Customize"; 0-player leagues; creator lands unlocked; add-players CTA + bulk add with duplicate guards. ([#5](https://github.com/joaohfrodrigues/fantasy-league/pull/5)) |
-| 9   | Round badges                           | `assignBadges` (`src/lib/badges.ts`): On Fire / On the Rise / Bottler / Ghost; saved scores only, ≥2 rounds; inline chips. `badges.test.ts`. ([#6](https://github.com/joaohfrodrigues/fantasy-league/pull/6))                          |
-| 10  | Landing quick wins                     | Demo badges from real logic, sharper copy, no-signup proof, OG/Twitter image tags (`VITE_SITE_URL`). ([#7](https://github.com/joaohfrodrigues/fantasy-league/pull/7), [#8](https://github.com/joaohfrodrigues/fantasy-league/pull/8))  |
-| 11  | Desktop score steppers                 | The −/+ steppers (previously mobile-only) now also show on desktop: slider + arrows + free text on desktop, arrows + free text on mobile. Reuses the clamped `stepValue`.                                                              |
+| #   | Feature                                | Notes                                                                                                                                                                                                                                                                                                        |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Round lock (with confirmation)         | `lockRound`/`unlockRound` server fns, `ROUND_LOCKED` guard in `saveScores`, lock UI in the round editor (confirm-to-lock, badge, disabled inputs).                                                                                                                                                           |
+| 2   | League-level edit history              | Audit logging for scores, lock/unlock, player add/remove, round add/delete, prize changes; `getAuditLog` + read-only history viewer in the board.                                                                                                                                                            |
+| 3   | JSON snapshot export (import deferred) | `exportLeague` returns a versioned JSON snapshot. `importLeague` exists but is intentionally not exposed — user uploads judged too risky, so export-only. See [ADR 0002](docs/adr/0002-export-only-no-import-ui.md).                                                                                         |
+| 4   | What-if mode                           | Client-only hypothetical scores layered over future (unplayed, unlocked) rounds; standings, odds and stats recompute (debounced). Never persisted.                                                                                                                                                           |
+| 5   | Custom tie-break rules                 | Per-league `tiebreak` (total / most round wins / best latest round); applied to standings ranks and the prize split, audited, edited via a selector when unlocked.                                                                                                                                           |
+| 6   | Deep Standings & Simulation modules    | Extracted `standings.ts` (tiebreak-aware ranking) + `simulation.ts` (Monte Carlo win probability) as tested pure modules; rank now honours the tiebreak. ([#2](https://github.com/joaohfrodrigues/fantasy-league/pull/2))                                                                                    |
+| 7   | Per-IP creation limits, no global cap  | `createLeague` keys the burst window per-IP; removed the global `MAX_LEAGUES_TOTAL` ceiling; raised hourly DB backstop. `rate-limit.test.ts`. ([#4](https://github.com/joaohfrodrigues/fantasy-league/pull/4))                                                                                               |
+| 8   | 10-second create flow                  | Create with name + template; players/password optional under "Customize"; 0-player leagues; creator lands unlocked; add-players CTA + bulk add with duplicate guards. ([#5](https://github.com/joaohfrodrigues/fantasy-league/pull/5))                                                                       |
+| 9   | Round badges                           | `assignBadges` (`src/lib/badges.ts`): On Fire / On the Rise / Bottler / Ghost; saved scores only, ≥2 rounds; inline chips. `badges.test.ts`. ([#6](https://github.com/joaohfrodrigues/fantasy-league/pull/6))                                                                                                |
+| 10  | Landing quick wins                     | Demo badges from real logic, sharper copy, no-signup proof, OG/Twitter image tags (`VITE_SITE_URL`). ([#7](https://github.com/joaohfrodrigues/fantasy-league/pull/7), [#8](https://github.com/joaohfrodrigues/fantasy-league/pull/8))                                                                        |
+| 11  | Desktop score steppers                 | The −/+ steppers (previously mobile-only) now also show on desktop: slider + arrows + free text on desktop, arrows + free text on mobile. Reuses the clamped `stepValue`.                                                                                                                                    |
+| 12  | Lock-aware board visuals               | Live (total, win-prob sim, tiebreak) vs record (badges + round prizes = locked rounds only). Sim banks locked rounds and treats unlocked ones as provisional with asymmetric upside. Lock shown to all users — status strip on mobile/tablet, 🔒 in desktop headers; unlocked round-wins styled provisional. |
 
 ## Backlog / Future
 
 Standalone items (smaller than an epic). Tagged `priority · size`.
 
-- [ ] **Lock-aware board visuals** — `Medium · M` — distinguish _live_ metrics from
-      _record_ metrics by round lock state (today every view recomputes from all
-      scores as edited). **Live (unchanged):** total points and the win-probability
-      simulation keep recomputing from all rounds. **Record (locked only):** badges
-      and round prizes (the per-player win tally) count locked rounds only, so a
-      result counts toward the record once its round is finalized. **Lock visibility:**
-      round lock state shown to all users (viewers + editors), not just editor chips
-      (supersedes the earlier editor-only decision), and must work on **mobile** (round
-      columns are hidden there). Touches `assignBadges` (needs a `locked` signal →
-      ripples into `badges.test.ts` and the landing demo), the prize/`wins` count in
-      `standings.ts` (locked-only, while total stays all-rounds), and the board lock
-      indicator. Needs a grilling pass for the mobile lock UX and the edge case of a
-      round win in an unlocked round (shown in the grid, not yet tallied).
 - [ ] **Rename `drink` → `round_prize`** — `Low · M` — the per-player win-token column
       is named `drink` for legacy reasons but the concept is a Round prize (see
       CONTEXT.md). DB migration + update `players` type, `setDrink`/`DrinkCell`, audit
