@@ -26,6 +26,19 @@ epic's tasks ship, the epic leaves the backlog.
       (see CONTEXT.md). Migration + update `players` type, `setDrink`/`DrinkCell`,
       audit `entityType: "drink"`, and `exportLeague`/`importLeague` snapshot keys.
       Keep export snapshot back-compat (accept old `drink` key on read).
+- [ ] **Lock-aware board visuals** — distinguish _live_ metrics from _record_ metrics
+      by round lock state. Today every view recomputes from all scores as they're
+      edited. Desired: - **Total points** and the **win-probability simulation** stay live — recompute
+      from all rounds (locked + unlocked) as scores change (no change). - **Badges** and **round prizes** (the per-player win tally) count **locked
+      rounds only**, so a result only counts toward the record once its round is
+      finalized. - **Round lock state is visible to all users** (viewers + editors), not just on
+      the editor chips — supersedes the earlier editor-only decision. Must work on
+      **mobile**, where round columns are hidden (the lock can't live only in the
+      column header).
+      Touches `assignBadges` (locked-only score lookup), the prize/`wins` count in
+      `standings.ts` (locked-only, while `agg`/total stays all-rounds), and the board
+      lock indicator. Needs a grilling pass for the mobile lock UX and edge cases
+      (e.g. a round win in an unlocked round — shown in the grid but not yet tallied).
 - [ ] **What-if slider** — replace per-round score entry in What-if mode with one
       slider per player over their **expected average** future score, defaulting to
       the player's current average. The slider sets the _mean_ only; the Monte Carlo
