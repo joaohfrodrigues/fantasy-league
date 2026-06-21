@@ -3,7 +3,12 @@ import { assignBadges } from "./badges";
 import type { ScoreLookup } from "./standings";
 
 const P = (id: string) => ({ id });
-const rounds = [{ id: "r1" }, { id: "r2" }, { id: "r3" }];
+// Badges count locked rounds only, so the fixtures mark every round locked.
+const rounds = [
+  { id: "r1", locked: true },
+  { id: "r2", locked: true },
+  { id: "r3", locked: true },
+];
 
 function lookup(scores: Record<string, number>): ScoreLookup {
   return (pid, rid) => scores[`${pid}:${rid}`];
@@ -84,5 +89,20 @@ describe("assignBadges", () => {
     const b = badges([P("p1"), P("p2"), P("p3")], score);
     expect(b.get("p3")).toContain("ghost");
     expect(b.get("p1")).not.toContain("ghost");
+  });
+
+  it("ignores unlocked rounds — badges are the finalized record", () => {
+    // p1 would be On Fire (won r1+r2), but the rounds are not locked.
+    const score = lookup({ "p1:r1": 50, "p2:r1": 40, "p1:r2": 50, "p2:r2": 40 });
+    const open = assignBadges({
+      players: [P("p1"), P("p2")],
+      rounds: [
+        { id: "r1", locked: false },
+        { id: "r2", locked: false },
+      ],
+      score,
+      tiebreak: "total",
+    });
+    expect(open.get("p1")).toEqual([]);
   });
 });

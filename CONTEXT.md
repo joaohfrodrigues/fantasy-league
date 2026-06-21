@@ -38,7 +38,10 @@ _Avoid_: matchday, gameweek, stage.
 
 **Locked round**:
 A round marked final (`locked_at` set): its scores are frozen and edits are
-rejected by the `ROUND_LOCKED` guard.
+rejected by the `ROUND_LOCKED` guard. Lock state also separates **live** metrics
+(total points, [[Win probability]], tiebreak — recompute from all rounds) from
+**record** metrics ([[Badge]]s and [[Round prize]] tallies — count locked rounds
+only). The simulation banks locked rounds and treats unlocked ones as provisional.
 _Avoid_: closed, finished.
 
 **Score**:

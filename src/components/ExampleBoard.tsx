@@ -30,7 +30,8 @@ const DEMO_PLAYERS: DemoPlayer[] = [
 // the showcase always matches the live behaviour.
 const DEMO_BADGES = assignBadges({
   players: DEMO_PLAYERS.map((p) => ({ id: p.name })),
-  rounds: DEMO_ROUND_SHORTS.map((short) => ({ id: short })),
+  // The demo is a finished example — all rounds locked so badges (locked-only) show.
+  rounds: DEMO_ROUND_SHORTS.map((short) => ({ id: short, locked: true })),
   score: (pid, rid) => {
     const p = DEMO_PLAYERS.find((x) => x.name === pid);
     const idx = DEMO_ROUND_SHORTS.indexOf(rid);

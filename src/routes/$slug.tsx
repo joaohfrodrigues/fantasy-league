@@ -332,13 +332,22 @@ function LeagueBoard() {
     [players, rounds, scoreOf],
   );
 
-  // Monte Carlo win probability (see src/lib/simulation.ts).
+  // Rounds with lock state, for the lock-aware simulation and badges.
+  const roundsWithLock = useMemo(
+    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null })),
+    [rounds],
+  );
+
+  // Monte Carlo win probability (see src/lib/simulation.ts). Lock-aware: locked
+  // rounds are banked, unlocked rounds are re-simulated. Live (uses simMap = saved
+  // + What-if), so it reacts to edits and What-if exploration.
   const dinnerProb = useMemo(
-    () => simulateWinProbability({ players, rounds, score: scoreOf }),
-    [players, rounds, scoreOf],
+    () => simulateWinProbability({ players, rounds: roundsWithLock, score: scoreOf }),
+    [players, roundsWithLock, scoreOf],
   );
 
   // Standings with the league's tiebreak applied to rank (see src/lib/standings.ts).
+  // Live: total + tiebreak use all rounds.
   const baseStandings = useMemo(
     () =>
       computeStandings({
@@ -352,23 +361,42 @@ function LeagueBoard() {
     [players, rounds, scoreOf, dinnerProb, tiebreak, roundMaxById],
   );
 
-  // Round badges (see src/lib/badges.ts). Saved scores only — not What-if.
+  // Round badges (see src/lib/badges.ts). Record metric: saved scores, locked rounds only.
   const badgesByPlayer = useMemo(
     () =>
       assignBadges({
         players,
-        rounds,
+        rounds: roundsWithLock,
         score: (pid, rid) => scoreMap.get(`${pid}:${rid}`),
         tiebreak,
       }),
-    [players, rounds, scoreMap, tiebreak],
+    [players, roundsWithLock, scoreMap, tiebreak],
   );
+
+  // Round-prize tally (the per-player win count shown in the prize column). Record
+  // metric: counts wins in locked rounds only, from saved scores.
+  const lockedWinsByPlayer = useMemo(() => {
+    const lockedRounds = rounds.filter((r) => r.locked_at !== null);
+    const savedScore = (pid: string, rid: string) => scoreMap.get(`${pid}:${rid}`);
+    const maxes = computeRoundMaxes(players, lockedRounds, savedScore);
+    const m = new Map<string, number>();
+    players.forEach((p) => {
+      let w = 0;
+      lockedRounds.forEach((r) => {
+        const mx = maxes.get(r.id);
+        const v = savedScore(p.id, r.id);
+        if (mx !== undefined && typeof v === "number" && v === mx) w += 1;
+      });
+      m.set(p.id, w);
+    });
+    return m;
+  }, [players, rounds, scoreMap]);
 
   const standings = useMemo(() => {
     const withRank = [...baseStandings];
 
     const valueFor = (row: (typeof withRank)[number]): number | null => {
-      if (sortKey === "prizes") return row.wins;
+      if (sortKey === "prizes") return lockedWinsByPlayer.get(row.player.id) ?? 0;
       if (sortKey === "dinner") return row.prob;
       if (sortKey === "total") return row.agg;
       const idx = roundIndexById.get(sortKey) ?? -1;
@@ -386,7 +414,7 @@ function LeagueBoard() {
       return (av - bv) * dir;
     });
     return withRank;
-  }, [baseStandings, roundIndexById, sortKey, sortDir]);
+  }, [baseStandings, roundIndexById, sortKey, sortDir, lockedWinsByPlayer]);
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -1083,6 +1111,46 @@ function LeagueBoard() {
             )}
           </div>
 
+          {/* Round status, visible to everyone where the per-round columns are hidden
+              (mobile + tablet). Desktop shows lock state in the column headers instead. */}
+          {rounds.length > 0 && (
+            <div
+              className="lg:hidden mb-4 flex items-center gap-1.5 overflow-x-auto pb-1"
+              aria-label={t.board.roundsStatusLabel}
+            >
+              {rounds.map((r) => {
+                const locked = r.locked_at !== null;
+                const played = roundsPlayedIds.includes(r.id);
+                return (
+                  <span
+                    key={r.id}
+                    title={
+                      locked
+                        ? t.board.roundFinal(r.name)
+                        : played
+                          ? t.board.roundInProgress(r.name)
+                          : t.board.roundUpcoming(r.name)
+                    }
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${
+                      locked
+                        ? "bg-pitch/15 text-pitch"
+                        : played
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          : "bg-surface-elevated text-muted-foreground"
+                    }`}
+                  >
+                    {locked ? (
+                      <Lock className="size-3" aria-hidden="true" />
+                    ) : played ? (
+                      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+                    ) : null}
+                    {r.short}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1130,8 +1198,9 @@ function LeagueBoard() {
                         title={t.board.sortBy(r.name)}
                         className={`uppercase tracking-wider inline-flex items-center gap-0.5 hover:text-foreground transition-colors ${
                           sortKey === r.id ? "text-foreground" : ""
-                        }`}
+                        } ${r.locked_at ? "" : "italic opacity-70"}`}
                       >
+                        {r.locked_at && <Lock className="size-2.5" aria-hidden="true" />}
                         {r.short}
                         <SortIcon active={sortKey === r.id} dir={sortDir} />
                       </button>
@@ -1205,7 +1274,7 @@ function LeagueBoard() {
                       <td className="py-4 align-top">
                         <DrinkCell
                           player={row.player}
-                          wins={row.wins}
+                          wins={lockedWinsByPlayer.get(row.player.id) ?? 0}
                           openUp={i >= standings.length - 3}
                           editable={unlocked}
                           open={drinkPickerFor === row.player.id}
@@ -1222,6 +1291,7 @@ function LeagueBoard() {
                       </td>
                       {row.perRound.map((v, idx) => {
                         const rid = rounds[idx].id;
+                        const roundLocked = rounds[idx].locked_at !== null;
                         const roundMax = roundMaxById.get(rid);
                         const isRoundWin = v !== null && roundMax !== undefined && v === roundMax;
                         const isWhatIf = whatIfOn && whatIf.has(`${row.player.id}:${rid}`);
@@ -1234,8 +1304,17 @@ function LeagueBoard() {
                               <span className="text-muted-foreground/30">—</span>
                             ) : isWhatIf ? (
                               <span className="text-amber-600 dark:text-amber-400 italic">{v}</span>
-                            ) : isRoundWin ? (
+                            ) : isRoundWin && roundLocked ? (
+                              // Banked round win (round is final).
                               <span className="text-pitch font-bold">{v}</span>
+                            ) : isRoundWin ? (
+                              // Currently leading an unlocked round — provisional, not yet tallied.
+                              <span
+                                className="text-pitch/60 font-bold underline decoration-dotted underline-offset-2"
+                                title={t.board.provisionalWin}
+                              >
+                                {v}
+                              </span>
                             ) : (
                               v
                             )}
