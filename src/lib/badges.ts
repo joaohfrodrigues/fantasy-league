@@ -23,14 +23,18 @@ const MIN_PLAYED = 2;
  */
 export function assignBadges<P extends { id: string }>(params: {
   players: P[];
-  rounds: { id: string }[];
+  rounds: { id: string; locked?: boolean }[];
   score: ScoreLookup;
   tiebreak: TiebreakMode;
 }): Map<string, BadgeId[]> {
-  const { players, rounds, score, tiebreak } = params;
+  const { players, score, tiebreak } = params;
 
   const result = new Map<string, BadgeId[]>();
   players.forEach((p) => result.set(p.id, []));
+
+  // Badges are the finalized record: only locked rounds count. The MIN_PLAYED gate
+  // therefore needs ≥2 LOCKED rounds before any badge can appear.
+  const rounds = params.rounds.filter((r) => r.locked);
 
   const roundMaxes = computeRoundMaxes(players, rounds, score);
   const playedRounds = rounds.filter((r) => roundMaxes.has(r.id));

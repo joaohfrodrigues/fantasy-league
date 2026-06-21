@@ -6,7 +6,6 @@ function lookup(scores: Record<string, number>): ScoreLookup {
 }
 
 const players = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
-const rounds = [{ id: "r1" }, { id: "r2" }, { id: "r3" }];
 
 function sum(m: Map<string, number>) {
   let s = 0;
@@ -14,26 +13,49 @@ function sum(m: Map<string, number>) {
   return s;
 }
 
-describe("simulateWinProbability", () => {
+describe("simulateWinProbability (lock-aware)", () => {
   it("returns an empty map for no players", () => {
-    expect(simulateWinProbability({ players: [], rounds, score: lookup({}) }).size).toBe(0);
+    const r = simulateWinProbability({
+      players: [],
+      rounds: [{ id: "r1", locked: true }],
+      score: lookup({}),
+    });
+    expect(r.size).toBe(0);
   });
 
   it("is deterministic — same inputs, same output", () => {
-    const score = lookup({ "p1:r1": 80, "p2:r1": 60, "p3:r1": 50 });
+    const rounds = [
+      { id: "r1", locked: true },
+      { id: "r2", locked: false },
+    ];
+    const score = lookup({
+      "p1:r1": 80,
+      "p2:r1": 60,
+      "p3:r1": 50,
+      "p1:r2": 40,
+      "p2:r2": 70,
+      "p3:r2": 30,
+    });
     const a = simulateWinProbability({ players, rounds, score });
     const b = simulateWinProbability({ players, rounds, score });
     expect([...a.entries()]).toEqual([...b.entries()]);
   });
 
-  it("probabilities sum to ~1 with rounds remaining", () => {
+  it("probabilities sum to ~1 while a round is open", () => {
+    const rounds = [
+      { id: "r1", locked: true },
+      { id: "r2", locked: false },
+    ];
     const score = lookup({ "p1:r1": 80, "p2:r1": 60, "p3:r1": 50 });
-    const probs = simulateWinProbability({ players, rounds, score });
-    expect(sum(probs)).toBeCloseTo(1, 5);
+    expect(sum(simulateWinProbability({ players, rounds, score }))).toBeCloseTo(1, 5);
   });
 
-  it("gives the outright leader probability 1 when no rounds remain", () => {
-    // Every round played -> deterministic by total, no simulation.
+  it("is deterministic by total once every round is locked", () => {
+    const rounds = [
+      { id: "r1", locked: true },
+      { id: "r2", locked: true },
+      { id: "r3", locked: true },
+    ];
     const score = lookup({
       "p1:r1": 50,
       "p1:r2": 50,
@@ -50,30 +72,49 @@ describe("simulateWinProbability", () => {
     expect(probs.get("p2")).toBe(0);
   });
 
-  it("splits probability on a finished tie for first", () => {
+  it("splits probability on a finished (all-locked) tie for first", () => {
+    const rounds = [{ id: "r1", locked: true }];
     const score = lookup({ "p1:r1": 50, "p2:r1": 50, "p3:r1": 10 });
-    const probs = simulateWinProbability({
-      players,
-      rounds: [{ id: "r1" }],
-      score,
-    });
+    const probs = simulateWinProbability({ players, rounds, score });
     expect(probs.get("p1")).toBeCloseTo(0.5, 5);
     expect(probs.get("p2")).toBeCloseTo(0.5, 5);
     expect(probs.get("p3")).toBe(0);
   });
 
-  it("favours the player with a large lead and one round left", () => {
-    const score = lookup({
-      "p1:r1": 140,
-      "p1:r2": 140,
-      "p2:r1": 10,
-      "p2:r2": 10,
-      "p3:r1": 10,
-      "p3:r2": 10,
+  it("a locked lead counts more than the same lead while unlocked", () => {
+    const two = [{ id: "p1" }, { id: "p2" }];
+    const score = lookup({ "p1:r1": 120, "p2:r1": 0 });
+    const lockedLead = simulateWinProbability({
+      players: two,
+      rounds: [
+        { id: "r1", locked: true },
+        { id: "r2", locked: false },
+      ],
+      score,
     });
-    // r3 still to play.
-    const probs = simulateWinProbability({ players, rounds, score });
-    expect(probs.get("p1")!).toBeGreaterThan(0.9);
-    expect(probs.get("p1")!).toBeGreaterThan(probs.get("p2")!);
+    const openLead = simulateWinProbability({
+      players: two,
+      rounds: [
+        { id: "r1", locked: false },
+        { id: "r2", locked: false },
+      ],
+      score,
+    });
+    expect(lockedLead.get("p1")!).toBeGreaterThan(openLead.get("p1")!);
+    expect(lockedLead.get("p1")!).toBeGreaterThan(0.5);
+  });
+
+  it("keeps upside for a low provisional score (not eliminated while open)", () => {
+    const two = [{ id: "p1" }, { id: "p2" }];
+    const score = lookup({ "p1:r1": 60, "p2:r1": 10 });
+    const probs = simulateWinProbability({
+      players: two,
+      rounds: [
+        { id: "r1", locked: false },
+        { id: "r2", locked: false },
+      ],
+      score,
+    });
+    expect(probs.get("p2")!).toBeGreaterThan(0);
   });
 });
