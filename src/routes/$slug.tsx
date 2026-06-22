@@ -960,6 +960,14 @@ function LeagueBoard() {
         <p className="text-xs text-muted-foreground/70 mt-3 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
           {t.board.heroFootnote}
         </p>
+        {latestSummary && (
+          <div className="mt-8 max-w-2xl rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-4 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-pitch mb-2">
+              {t.board.afterRound(latestSummary.name)}
+            </p>
+            <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.summary}</p>
+          </div>
+        )}
       </section>
 
       {/* What-if panel */}
@@ -1210,15 +1218,6 @@ function LeagueBoard() {
                   </span>
                 );
               })}
-            </div>
-          )}
-
-          {latestSummary && (
-            <div className="mx-6 mb-4 rounded-xl border border-border/40 bg-surface-elevated/40 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-pitch mb-2">
-                {t.board.afterRound(latestSummary.name)}
-              </p>
-              <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.summary}</p>
             </div>
           )}
 

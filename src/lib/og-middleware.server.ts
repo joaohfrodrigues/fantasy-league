@@ -439,8 +439,8 @@ function RecapCard(props: {
   totalRounds: number;
 }) {
   const { leagueName, roundName, standings, winner, banterText, roundsPlayed, totalRounds } = props;
-  const top3 = standings.slice(0, 3);
-  const rankEmoji = ["🥇", "🥈", "🥉"];
+  // Show up to 6 rows so the card fills without a dead zone.
+  const rows = standings.slice(0, 6);
 
   return h(
     "div",
@@ -451,10 +451,11 @@ function RecapCard(props: {
         width: "1080px",
         height: "1080px",
         backgroundColor: BRAND_BLUE,
-        padding: "60px",
+        padding: "56px 60px 48px",
         fontFamily: "Space Grotesk",
       },
     },
+    // ── header ────────────────────────────────────────────────────────────────
     h(
       "div",
       {
@@ -462,35 +463,47 @@ function RecapCard(props: {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          marginBottom: "48px",
+          marginBottom: "36px",
         },
       },
       h(
         "div",
-        { style: { display: "flex", flexDirection: "column", gap: "4px" } },
+        { style: { display: "flex", flexDirection: "column", gap: "6px" } },
         h(
           "span",
           {
             style: {
-              fontSize: "14px",
+              fontSize: "15px",
               color: MUTED,
               fontWeight: 600,
               textTransform: "uppercase",
-              letterSpacing: "0.12em",
+              letterSpacing: "0.16em",
             },
           },
           "Fantasy Tracker",
         ),
-        h("span", { style: { fontSize: "36px", fontWeight: 700, color: TEXT } }, leagueName),
-      ),
-      h(
-        "div",
-        { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" } },
         h(
           "span",
           {
             style: {
-              fontSize: "14px",
+              fontSize: leagueName.length > 22 ? "36px" : "42px",
+              fontWeight: 700,
+              color: TEXT,
+              lineHeight: "1.05",
+              maxWidth: "640px",
+            },
+          },
+          leagueName,
+        ),
+      ),
+      h(
+        "div",
+        { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" } },
+        h(
+          "span",
+          {
+            style: {
+              fontSize: "15px",
               color: MUTED,
               fontWeight: 600,
               textTransform: "uppercase",
@@ -501,11 +514,12 @@ function RecapCard(props: {
         ),
         h(
           "span",
-          { style: { fontSize: "20px", fontWeight: 700, color: GOLD } },
-          `${roundsPlayed}/${totalRounds} rounds`,
+          { style: { fontSize: "22px", fontWeight: 700, color: GOLD } },
+          `${roundsPlayed} / ${totalRounds} rounds`,
         ),
       ),
     ),
+    // ── round winner strip ────────────────────────────────────────────────────
     winner &&
       h(
         "div",
@@ -513,85 +527,117 @@ function RecapCard(props: {
           style: {
             display: "flex",
             alignItems: "center",
-            gap: "16px",
+            gap: "20px",
             backgroundColor: SURFACE,
-            borderRadius: "16px",
-            padding: "20px 28px",
-            marginBottom: "32px",
+            borderRadius: "14px",
+            padding: "18px 28px",
+            marginBottom: "28px",
             borderLeft: `4px solid ${GOLD}`,
           },
         },
-        h("span", { style: { fontSize: "36px" } }, "🏆"),
         h(
-          "div",
-          { style: { display: "flex", flexDirection: "column" } },
-          h(
-            "span",
-            {
-              style: {
-                fontSize: "13px",
-                color: MUTED,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-              },
+          "span",
+          {
+            style: {
+              fontSize: "13px",
+              color: GOLD,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
             },
-            "Round winner",
-          ),
-          h("span", { style: { fontSize: "32px", fontWeight: 700, color: TEXT } }, winner),
+          },
+          `${roundName} winner`,
         ),
+        h("span", { style: { fontSize: "30px", fontWeight: 700, color: TEXT } }, winner),
       ),
+    // ── standings (fills remaining space) ─────────────────────────────────────
     h(
       "div",
-      { style: { display: "flex", flexDirection: "column", gap: "12px", marginBottom: "40px" } },
-      ...top3.map((row, i) =>
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          flexGrow: 1,
+        },
+      },
+      ...rows.map((row, i) =>
         h(
           "div",
           {
             key: row.name,
             style: {
               display: "flex",
+              flexGrow: 1,
               alignItems: "center",
               justifyContent: "space-between",
-              backgroundColor: i === 0 ? SURFACE : "rgba(30,40,64,0.5)",
-              borderRadius: "12px",
-              padding: "16px 24px",
-              borderLeft: i === 0 ? `3px solid ${ACCENT}` : "3px solid transparent",
+              backgroundColor: i === 0 ? SURFACE : "rgba(30,40,64,0.45)",
+              borderRadius: "14px",
+              padding: "0 28px",
+              borderLeft: i === 0 ? `4px solid ${ACCENT}` : "4px solid transparent",
             },
           },
           h(
             "div",
-            { style: { display: "flex", alignItems: "center", gap: "16px" } },
-            h("span", { style: { fontSize: "28px" } }, rankEmoji[i] ?? `#${row.rank}`),
+            { style: { display: "flex", alignItems: "center", gap: "22px" } },
+            // rank badge (number, no emoji)
+            h(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "12px",
+                  backgroundColor: i === 0 ? ACCENT : "rgba(148,163,184,0.15)",
+                },
+              },
+              h(
+                "span",
+                {
+                  style: {
+                    fontSize: "24px",
+                    fontWeight: 700,
+                    color: i === 0 ? BRAND_BLUE : MUTED,
+                  },
+                },
+                String(row.rank),
+              ),
+            ),
             h(
               "span",
-              { style: { fontSize: i === 0 ? "28px" : "24px", fontWeight: 700, color: TEXT } },
+              { style: { fontSize: i === 0 ? "32px" : "28px", fontWeight: 700, color: TEXT } },
               row.name,
             ),
           ),
           h(
             "div",
-            { style: { display: "flex", flexDirection: "column", alignItems: "flex-end" } },
+            { style: { display: "flex", alignItems: "baseline", gap: "16px" } },
+            h(
+              "span",
+              { style: { fontSize: "16px", color: MUTED, fontWeight: 600 } },
+              `${Math.round(row.prob * 100)}%`,
+            ),
             h(
               "span",
               {
                 style: {
-                  fontSize: i === 0 ? "28px" : "22px",
+                  fontSize: i === 0 ? "30px" : "26px",
                   fontWeight: 700,
                   color: i === 0 ? ACCENT : TEXT,
+                  minWidth: "120px",
+                  textAlign: "right",
                 },
               },
               `${row.total} pts`,
-            ),
-            h(
-              "span",
-              { style: { fontSize: "13px", color: MUTED } },
-              `${Math.round(row.prob * 100)}% odds`,
             ),
           ),
         ),
       ),
     ),
+    // ── banter ────────────────────────────────────────────────────────────────
     h(
       "div",
       {
@@ -601,21 +647,22 @@ function RecapCard(props: {
           borderRadius: "16px",
           padding: "24px 28px",
           borderLeft: `4px solid ${ACCENT}`,
-          marginTop: "auto",
+          marginTop: "28px",
         },
       },
       h(
         "span",
-        { style: { fontSize: "20px", color: TEXT, lineHeight: "1.5", fontWeight: 600 } },
+        { style: { fontSize: "21px", color: TEXT, lineHeight: "1.5", fontWeight: 600 } },
         banterText,
       ),
     ),
+    // ── footer ────────────────────────────────────────────────────────────────
     h(
       "div",
-      { style: { display: "flex", justifyContent: "flex-end", marginTop: "24px" } },
+      { style: { display: "flex", justifyContent: "flex-end", marginTop: "20px" } },
       h(
         "span",
-        { style: { fontSize: "14px", color: MUTED, fontWeight: 600, letterSpacing: "0.1em" } },
+        { style: { fontSize: "15px", color: MUTED, fontWeight: 600, letterSpacing: "0.1em" } },
         "fantasy-tracker.app",
       ),
     ),
