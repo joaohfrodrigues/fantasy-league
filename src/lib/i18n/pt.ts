@@ -340,6 +340,17 @@ export const pt = {
     roundLabel: "Ronda",
     points: "Pontos",
     clearScore: "Limpar pontos",
+
+    afterRound: (name: string) => `Após ${name}`,
+
+    claimRow: "Sou eu",
+    unclaimRow: "Não sou eu",
+    shareMyOdds: "Partilhar as minhas probabilidades",
+    shareRound: "Partilhar resumo",
+    shareRoundTitle: "Partilhar o resumo desta ronda",
+    shareCopied: "Copiado para a área de transferência",
+    shareOddsText: (rank: number, pct: number, leagueName: string) =>
+      `Estou em ${rank}.º lugar em ${leagueName} com ${pct}% de probabilidade de ganhar o prémio! 🏆`,
   },
 };
 

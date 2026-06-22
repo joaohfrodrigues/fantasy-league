@@ -865,7 +865,141 @@ async function setRoundLock(
     newValues: { locked_at: lockedAt },
   });
 
+  if (lock) {
+    // Generate and store the round summary. Never fails the lock action.
+    try {
+      await generateRoundSummary(admin, leagueId, roundId);
+    } catch (err) {
+      console.error("[leagues] round summary generation failed:", err);
+    }
+  }
+
   return { ok: true };
+}
+
+async function generateRoundSummary(
+  admin: AdminClient,
+  leagueId: string,
+  roundId: string,
+): Promise<void> {
+  const [{ data: lg }, { data: rounds }, { data: players }] = await Promise.all([
+    admin.from("leagues").select("id, name, tiebreak").eq("id", leagueId).maybeSingle(),
+    admin
+      .from("rounds")
+      .select("id, name, locked_at, display_order")
+      .eq("league_id", leagueId)
+      .order("display_order"),
+    admin
+      .from("players")
+      .select("id, name, display_order, drink")
+      .eq("league_id", leagueId)
+      .order("display_order"),
+  ]);
+  if (!lg || !rounds?.length || !players?.length) return;
+
+  const roundIds = rounds.map((r: { id: string }) => r.id);
+  const { data: scores } = await admin
+    .from("scores")
+    .select("player_id, round_id, points")
+    .in("round_id", roundIds);
+
+  type PR = { id: string; name: string; locked_at: string | null; display_order: number };
+  type PP = { id: string; name: string; display_order: number; drink: string };
+  type PS = { player_id: string; round_id: string; points: number };
+
+  const roundList = rounds as PR[];
+  const playerList = players as PP[];
+  const scoreList = (scores ?? []) as PS[];
+  const targetRound = roundList.find((r) => r.id === roundId);
+  if (!targetRound) return;
+
+  const scoreOf = (pid: string, rid: string) =>
+    scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
+  const roundsWithLock = roundList.map((r) => ({ id: r.id, locked: r.locked_at !== null }));
+
+  const { computeStandings, computeRoundMaxes } = await import("./standings");
+  const { simulateWinProbability } = await import("./simulation");
+  const { assignBadges } = await import("./badges");
+  const { getBanter, templatedBanter } = await import("./banter.server");
+
+  const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
+  const winProbability = simulateWinProbability({
+    players: playerList,
+    rounds: roundsWithLock,
+    score: scoreOf,
+    pairs: 500,
+  });
+  const tiebreak = (lg.tiebreak as "total" | "wins" | "latest") ?? "total";
+  const standingRows = computeStandings({
+    players: playerList,
+    rounds: roundList,
+    score: scoreOf,
+    winProbability,
+    tiebreak,
+    roundMaxes,
+  });
+  const badges = assignBadges({
+    players: playerList,
+    rounds: roundsWithLock,
+    score: scoreOf,
+    tiebreak,
+  });
+
+  const roundMax = roundMaxes.get(roundId);
+  const roundWinner =
+    roundMax !== undefined
+      ? (playerList.find((p) => scoreOf(p.id, roundId) === roundMax)?.name ?? null)
+      : null;
+  const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
+
+  // Build round history for context (all played rounds up to and including this one)
+  const playedRounds = roundList.filter((r) => roundMaxes.has(r.id));
+  const recentRounds = playedRounds.map((r) => {
+    const max = roundMaxes.get(r.id);
+    const winner =
+      max !== undefined
+        ? (playerList.find((p) => scoreOf(p.id, r.id) === max)?.name ?? null)
+        : null;
+    return { roundName: r.name, winner };
+  });
+
+  const input = {
+    leagueId: lg.id,
+    roundId,
+    leagueName: lg.name,
+    roundName: targetRound.name,
+    roundWinner,
+    standings: standingRows
+      .sort((a, b) => a.rank - b.rank)
+      .map((r) => ({
+        name: r.player.name,
+        total: r.agg,
+        rank: r.rank,
+        prob: r.prob,
+      })),
+    recentRounds,
+    badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
+    roundsPlayed,
+    totalRounds: roundList.length,
+  };
+
+  const { en, pt, ai } = await getBanter(input).catch(() => ({
+    en: templatedBanter(input, "en"),
+    pt: templatedBanter(input, "pt"),
+    ai: false,
+  }));
+  console.log(
+    `[banter] round "${targetRound.name}" (league ${lg.name}): ${ai ? "AI (Gemini)" : "templated fallback"}`,
+  );
+  // Bypass strict Supabase schema types until migration is applied and types regenerated.
+  type RoundsSummaryUpdate = {
+    update(d: { summary_en: string | null; summary_pt: string | null }): {
+      eq(col: string, val: string): Promise<unknown>;
+    };
+  };
+  await (admin.from("rounds") as unknown as RoundsSummaryUpdate)
+    .update({ summary_en: en, summary_pt: pt })
+    .eq("id", roundId);
 }
 
 export const lockRound = createServerFn({ method: "POST" })
