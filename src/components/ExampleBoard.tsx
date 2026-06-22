@@ -56,6 +56,15 @@ export function ExampleBoard() {
     Math.max(...DEMO_PLAYERS.map((p) => p.scores[idx])),
   );
 
+  // Mirror the live board: reveal the most recent round columns progressively by
+  // width (latest always visible, then sm/md), instead of an all-or-nothing lg
+  // cutoff. Every demo round is played, so recency follows display order.
+  const roundColClass = (idx: number): string => {
+    const recency = DEMO_ROUND_SHORTS.length - 1 - idx;
+    const byRecency = ["table-cell", "hidden sm:table-cell", "hidden md:table-cell"];
+    return recency < byRecency.length ? byRecency[recency] : "hidden lg:table-cell";
+  };
+
   const rows = DEMO_PLAYERS.map((p) => {
     const total = p.scores.reduce((a, b) => a + b, 0);
     const wins = p.scores.reduce((acc, v, idx) => (v === roundMax[idx] ? acc + 1 : acc), 0);
@@ -113,14 +122,16 @@ export function ExampleBoard() {
               <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                 <th className="text-left font-medium px-6 py-3 w-10">#</th>
                 <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
-                <th className="text-left font-medium py-3">{t.board.colRoundPrizes}</th>
+                <th className="text-left font-medium py-3 hidden md:table-cell">
+                  {t.board.colRoundPrizes}
+                </th>
                 <th className="text-center font-medium py-3 hidden md:table-cell">
                   {t.board.colDinner}
                 </th>
                 {DEMO_ROUND_SHORTS.map((short, idx) => (
                   <th
                     key={short}
-                    className="text-center font-medium py-3 px-1.5 hidden lg:table-cell"
+                    className={`text-center font-medium py-3 px-1.5 ${roundColClass(idx)}`}
                     title={t.landing.templates.matchday(idx + 1)}
                   >
                     {short}
@@ -160,12 +171,21 @@ export function ExampleBoard() {
                           </span>
                         ))}
                       </span>
-                      <div className="text-xs text-muted-foreground mt-1 md:hidden">
-                        <span className="mr-1">{emoji}</span>
-                        {label} · {pct}%
+                      <div className="text-xs text-muted-foreground mt-1 md:hidden flex items-center gap-1.5">
+                        {row.wins > 0 && (
+                          <span className="inline-flex items-center gap-0.5">
+                            <span className="leading-none">{row.drink}</span>
+                            <span className="font-mono tabular-nums">×{row.wins}</span>
+                          </span>
+                        )}
+                        {row.wins > 0 && <span aria-hidden="true">·</span>}
+                        <span>
+                          <span className="mr-1">{emoji}</span>
+                          {pct}%
+                        </span>
                       </div>
                     </td>
-                    <td className="py-4 align-top">
+                    <td className="py-4 align-top hidden md:table-cell">
                       <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated">
                         <span className="text-lg leading-none">{row.drink}</span>
                         <span className="font-mono text-xs tabular-nums text-muted-foreground">
@@ -198,7 +218,7 @@ export function ExampleBoard() {
                       return (
                         <td
                           key={DEMO_ROUND_SHORTS[idx]}
-                          className="text-center font-mono text-xs tabular-nums px-1.5 hidden lg:table-cell align-top py-4"
+                          className={`text-center font-mono text-xs tabular-nums px-1.5 align-top py-4 ${roundColClass(idx)}`}
                         >
                           {isRoundWin ? <span className="text-pitch font-bold">{v}</span> : v}
                         </td>
