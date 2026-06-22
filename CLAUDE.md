@@ -32,6 +32,10 @@ Validation guidance: prefer narrow checks for what you changed. Use `bun run bui
 for an app-level check and `bunx tsc --noEmit` for stricter typing. Repo-wide
 `bun run lint` may report pre-existing issues — focus on files you touched.
 
+A husky + lint-staged **pre-commit hook** runs `eslint --fix` and `prettier` on
+staged files and aborts the commit on any eslint error — so run `bunx tsc
+--noEmit` before committing, and avoid lint-failing constructs like `as any`.
+
 ## Project layout
 
 - `src/routes/` — file-based routes. `__root.tsx` is the app shell, `index.tsx`
@@ -52,6 +56,27 @@ for an app-level check and `bunx tsc --noEmit` for stricter typing. Repo-wide
 - Dynamic route files use a bare `$` (e.g. `src/routes/$slug.tsx`).
   **Quote `$` paths in zsh** when running terminal commands against them.
 - Do not edit `src/routeTree.gen.ts` manually.
+- `createAPIFileRoute` does **not** exist in the installed TanStack Start
+  version (it's docs-only). To serve a non-page HTTP response at a clean URL
+  (e.g. a binary PNG), intercept the path in a `requestMiddleware` in
+  `src/start.ts` and return a `Response` before the router runs. See
+  `ogMiddleware` → `src/lib/og-middleware.server.ts` for the pattern.
+
+### Dynamic images (OG / recap cards)
+
+- Generated server-side with **satori** (JSX → SVG) + **@resvg/resvg-js**
+  (SVG → PNG). Build elements with `createElement` (aliased `h`); satori only
+  supports a flexbox subset of CSS.
+- **Satori has no emoji font** — emoji render as `?` boxes. Use styled
+  text/shapes (e.g. numbered rank badges) instead of emoji in card layouts.
+- Fonts are loaded from `public/fonts/*.woff` via `readFileSync` (always present
+  in dev and on Vercel). `@resvg/resvg-js` ships platform-specific native
+  binaries via optionalDependencies — Vercel's Linux CI installs its own.
+- Wrap the resvg `Uint8Array` in `Buffer.from(png)` to satisfy `Response`'s
+  `BodyInit` type.
+- Routes: `/api/og/:slug` (1200×630 league card), `/api/recap/:slug/:roundId`
+  (1080×1080 round recap). The league board injects `og:image` via route
+  `head()`.
 
 ### Server boundary
 
@@ -77,6 +102,24 @@ for an app-level check and `bunx tsc --noEmit` for stricter typing. Repo-wide
 - Do not leak service-role credentials into the client graph.
 - If a module needs server-only secrets, do not top-level import it into code
   that can ship to the browser.
+- Server-only secrets are read via `process.env` (e.g.
+  `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_AI_API_KEY`); non-`VITE_` vars from `.env`
+  are available server-side. A new env var needs a **dev-server restart**.
+- The generated `src/integrations/supabase/types.ts` **lags new migrations**.
+  Until types are regenerated, a query/update touching a new column won't
+  typecheck. Cast through a narrow local interface (via `unknown`) rather than
+  `as any` — the pre-commit eslint rejects `@typescript-eslint/no-explicit-any`.
+  See the `summary_en`/`summary_pt` update in `leagues.functions.ts`.
+
+### AI round summaries
+
+- Generated once **when a round is locked** (`setRoundLock` in
+  `leagues.functions.ts`), never on the client/share path; failures must not
+  block the lock.
+- Model is Gemini (`GOOGLE_AI_API_KEY`); a single structured-JSON call returns
+  both locales (`{ en, pt }`) stored in `rounds.summary_en` / `summary_pt`.
+- `templatedBanter` is the locale-aware fallback when the API is unavailable —
+  keep it bilingual too. Logs tag `[banter] … AI (Gemini) | templated fallback`.
 
 ### i18n
 
