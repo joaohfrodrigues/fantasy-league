@@ -1,6 +1,7 @@
 // Server-only: AI banter generation for round summaries.
-// Called once when a round is locked; result is stored in rounds.summary.
-// Primary: Gemini 2.0 Flash Lite (GOOGLE_AI_API_KEY). Fallback: templated text.
+// Called once when a round is locked; result is stored in rounds.summary_en/_pt.
+// Primary: Gemini 3.1 Flash Lite (GOOGLE_AI_API_KEY), returns EN + PT-PT in one
+// JSON call. Fallback: locale-aware templated text.
 import type { BadgeId } from "./badges";
 
 export type BanterInput = {
