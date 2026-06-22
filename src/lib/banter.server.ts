@@ -1,16 +1,7 @@
-// Server-only: AI banter generation with rate limiting and per-round caching.
-// Primary: Gemini Flash (free tier, configured via GOOGLE_AI_API_KEY).
-// Fallback: templated banter derived from standings/badges.
-import { consumeWindowLimit } from "./rate-limit.server";
+// Server-only: AI banter generation for round summaries.
+// Called once when a round is locked; result is stored in rounds.summary.
+// Primary: Gemini 2.0 Flash Lite (GOOGLE_AI_API_KEY). Fallback: templated text.
 import type { BadgeId } from "./badges";
-
-const BANTER_PER_LEAGUE_MAX = 3;
-const BANTER_PER_LEAGUE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const BANTER_GLOBAL_MAX = 100;
-const BANTER_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
-
-// In-memory cache: banter per (leagueId, roundId) pair. Process-local, good enough.
-const banterCache = new Map<string, string>();
 
 export type BanterInput = {
   leagueId: string;
@@ -18,16 +9,19 @@ export type BanterInput = {
   leagueName: string;
   roundName: string;
   roundWinner: string | null;
-  leader: string | null;
-  lastPlace: string | null;
+  /** Full current standings after this round, sorted by rank. */
+  standings: { name: string; total: number; rank: number; prob: number }[];
+  /** All rounds played so far, newest last. */
+  recentRounds: { roundName: string; winner: string | null }[];
   badges: { player: string; badges: BadgeId[] }[];
-  playerCount: number;
   roundsPlayed: number;
   totalRounds: number;
 };
 
-function templatedBanter(input: BanterInput): string {
-  const { roundWinner, leader, lastPlace, badges, roundName, roundsPlayed, totalRounds } = input;
+export function templatedBanter(input: BanterInput): string {
+  const { roundWinner, standings, badges, roundName, roundsPlayed, totalRounds } = input;
+  const leader = standings[0]?.name ?? null;
+  const lastPlace = standings[standings.length - 1]?.name ?? null;
   const remaining = totalRounds - roundsPlayed;
 
   const onFire = badges.find((b) => b.badges.includes("onFire"));
@@ -76,14 +70,11 @@ async function callGemini(prompt: string): Promise<string | null> {
       systemInstruction: {
         parts: [
           {
-            text: "You are a ruthless fantasy football pundit — sharp, funny, no mercy. Praise whoever is winning, roast whoever is losing. Be specific about players by name. Keep it to 3 sentences max. No hashtags, no emojis, no filler like 'Alright folks'. Just the take.",
+            text: "You are a ruthless fantasy football pundit — sharp, funny, no mercy. You write a short post-round summary for a league of friends. Praise whoever is winning, roast whoever is losing. Be specific about players by name. Keep it to 3 sentences max. No hashtags, no emojis, no filler like 'Alright folks'. Just the pundit take.",
           },
         ],
       },
-      generationConfig: {
-        maxOutputTokens: 120,
-        temperature: 0.9,
-      },
+      generationConfig: { maxOutputTokens: 150, temperature: 0.9 },
     };
     const res = await fetch(url, {
       method: "POST",
@@ -101,62 +92,51 @@ async function callGemini(prompt: string): Promise<string | null> {
   }
 }
 
-export async function getBanter(input: BanterInput): Promise<{ text: string; ai: boolean }> {
-  const cacheKey = `${input.leagueId}:${input.roundId}`;
-  const cached = banterCache.get(cacheKey);
-  if (cached) return { text: cached, ai: true };
-
-  // Rate limit: per-league and global
-  const leagueWait = consumeWindowLimit(
-    `banter:league:${input.leagueId}`,
-    BANTER_PER_LEAGUE_MAX,
-    BANTER_PER_LEAGUE_WINDOW_MS,
-  );
-  const globalWait = consumeWindowLimit(
-    "banter:global",
-    BANTER_GLOBAL_MAX,
-    BANTER_GLOBAL_WINDOW_MS,
-  );
-  const limited = leagueWait > 0 || globalWait > 0;
-
-  if (!limited) {
-    const prompt = buildPrompt(input);
-    const aiText = await callGemini(prompt);
-    if (aiText) {
-      banterCache.set(cacheKey, aiText);
-      return { text: aiText, ai: true };
-    }
-  }
-
-  return { text: templatedBanter(input), ai: false };
-}
-
 function buildPrompt(input: BanterInput): string {
   const {
     leagueName,
     roundName,
     roundWinner,
-    leader,
-    lastPlace,
+    standings,
+    recentRounds,
     badges,
     roundsPlayed,
     totalRounds,
   } = input;
   const remaining = totalRounds - roundsPlayed;
+
+  const standingLines = standings
+    .map((s) => `#${s.rank} ${s.name} — ${s.total} pts (${Math.round(s.prob * 100)}% to win)`)
+    .join("; ");
+
+  const historyLines =
+    recentRounds.length > 1
+      ? recentRounds
+          .slice(0, -1)
+          .map((r) => `${r.roundName}: ${r.winner ?? "no winner"}`)
+          .join(", ")
+      : null;
+
   const badgeLines = badges
     .filter((b) => b.badges.length > 0)
     .map((b) => `${b.player}: ${b.badges.join(", ")}`)
     .join("; ");
 
   return [
-    `League: ${leagueName}. Round just finished: ${roundName}.`,
-    roundWinner ? `Round winner: ${roundWinner}.` : "No clear round winner.",
-    leader ? `Current overall leader: ${leader}.` : "",
-    lastPlace ? `Last place: ${lastPlace}.` : "",
-    badgeLines ? `Badges: ${badgeLines}.` : "",
-    `${remaining} round${remaining === 1 ? "" : "s"} remaining.`,
-    "Give me the pundit take.",
+    `League: ${leagueName}. ${roundsPlayed} of ${totalRounds} rounds played, ${remaining} remaining.`,
+    `Round just finished: ${roundName}. Winner: ${roundWinner ?? "none"}.`,
+    `Current standings: ${standingLines}.`,
+    historyLines ? `Previous rounds: ${historyLines}.` : null,
+    badgeLines ? `Badges this round: ${badgeLines}.` : null,
+    "Write the post-round pundit take, focusing on this round's result and overall standings.",
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/** Generate banter for a round. Returns AI text when available, templated fallback otherwise. */
+export async function getBanter(input: BanterInput): Promise<{ text: string; ai: boolean }> {
+  const aiText = await callGemini(buildPrompt(input));
+  if (aiText) return { text: aiText, ai: true };
+  return { text: templatedBanter(input), ai: false };
 }

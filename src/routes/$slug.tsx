@@ -84,6 +84,7 @@ type Round = {
   short: string;
   display_order: number;
   locked_at: string | null;
+  summary?: string | null;
 };
 type Player = { id: string; name: string; display_order: number; drink: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
@@ -223,7 +224,7 @@ function LeagueBoard() {
       ? await supabase.from("scores").select("*").in("round_id", roundIds)
       : { data: [] as Score[] };
     setLeague(lg as League);
-    setRounds((r ?? []) as Round[]);
+    setRounds((r ?? []) as unknown as Round[]);
     setPlayers((p ?? []) as Player[]);
     setScores((s ?? []) as Score[]);
     setLoading(false);
@@ -442,6 +443,14 @@ function LeagueBoard() {
     });
     return withRank;
   }, [baseStandings, roundIndexById, sortKey, sortDir, lockedWinsByPlayer]);
+
+  // Most recently locked round that has a generated summary.
+  const latestSummary = useMemo(() => {
+    const locked = rounds
+      .filter((r) => r.locked_at !== null && r.summary)
+      .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime());
+    return locked[0] ?? null;
+  }, [rounds]);
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -1201,6 +1210,15 @@ function LeagueBoard() {
                   </span>
                 );
               })}
+            </div>
+          )}
+
+          {latestSummary && (
+            <div className="mx-6 mb-4 rounded-xl border border-border/40 bg-surface-elevated/40 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-pitch mb-2">
+                {t.board.afterRound(latestSummary.name)}
+              </p>
+              <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.summary}</p>
             </div>
           )}
 

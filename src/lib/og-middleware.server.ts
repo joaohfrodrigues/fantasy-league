@@ -110,7 +110,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     const [{ data: rounds }, { data: players }] = await Promise.all([
       db
         .from("rounds")
-        .select("id, name, locked_at, display_order")
+        .select("id, name, locked_at, display_order, summary")
         .eq("league_id", lg.id)
         .order("display_order"),
       db
@@ -119,9 +119,15 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
         .eq("league_id", lg.id)
         .order("display_order"),
     ]);
-    type PR = { id: string; name: string; locked_at: string | null; display_order: number };
+    type PR = {
+      id: string;
+      name: string;
+      locked_at: string | null;
+      display_order: number;
+      summary: string | null;
+    };
     type PP = { id: string; name: string; display_order: number; drink: string };
-    const roundList = (rounds ?? []) as PR[];
+    const roundList = (rounds ?? []) as unknown as PR[];
     const playerList = (players ?? []) as PP[];
     const roundIds = roundList.map((r) => r.id);
     const { data: scores } = roundIds.length
@@ -151,13 +157,6 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
       tiebreak,
       roundMaxes,
     });
-    const badges = assignBadges({
-      players: playerList,
-      rounds: roundsWithLock,
-      score: scoreOf,
-      tiebreak,
-    });
-    const badgesInput = playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] }));
     const roundMax = roundMaxes.get(roundId);
     const roundWinner =
       roundMax !== undefined
@@ -165,20 +164,40 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
         : null;
     const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
 
-    const { getBanter } = await import("./banter.server");
-    const { text: banterText } = await getBanter({
-      leagueId: lg.id,
-      roundId: targetRound.id,
-      leagueName: lg.name,
-      roundName: targetRound.name,
-      roundWinner,
-      leader: standingRows[0]?.player.name ?? null,
-      lastPlace: standingRows[standingRows.length - 1]?.player.name ?? null,
-      badges: badgesInput,
-      playerCount: playerList.length,
-      roundsPlayed,
-      totalRounds: roundList.length,
-    });
+    // Use the stored summary (generated on lock) or fall back to templated banter.
+    let banterText = targetRound.summary;
+    if (!banterText) {
+      const { templatedBanter } = await import("./banter.server");
+      const playedRounds = roundList.filter((r) => roundMaxes.has(r.id));
+      const recentRounds = playedRounds.map((r) => {
+        const max = roundMaxes.get(r.id);
+        const winner =
+          max !== undefined
+            ? (playerList.find((p) => scoreOf(p.id, r.id) === max)?.name ?? null)
+            : null;
+        return { roundName: r.name, winner };
+      });
+      const badges = assignBadges({
+        players: playerList,
+        rounds: roundsWithLock,
+        score: scoreOf,
+        tiebreak,
+      });
+      banterText = templatedBanter({
+        leagueId: lg.id,
+        roundId,
+        leagueName: lg.name,
+        roundName: targetRound.name,
+        roundWinner,
+        standings: standingRows
+          .sort((a, b) => a.rank - b.rank)
+          .map((r) => ({ name: r.player.name, total: r.agg, rank: r.rank, prob: r.prob })),
+        recentRounds,
+        badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
+        roundsPlayed,
+        totalRounds: roundList.length,
+      });
+    }
 
     const standingsForCard = standingRows
       .sort((a, b) => a.rank - b.rank)

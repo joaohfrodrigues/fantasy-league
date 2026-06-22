@@ -341,6 +341,8 @@ export const pt = {
     points: "Pontos",
     clearScore: "Limpar pontos",
 
+    afterRound: (name: string) => `Após ${name}`,
+
     claimRow: "Sou eu",
     unclaimRow: "Não sou eu",
     shareMyOdds: "Partilhar as minhas probabilidades",

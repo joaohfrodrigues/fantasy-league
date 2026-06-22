@@ -334,6 +334,8 @@ export const en: Dict = {
     points: "Points",
     clearScore: "Clear score",
 
+    afterRound: (name: string) => `After ${name}`,
+
     claimRow: "This is me",
     unclaimRow: "Not me",
     shareMyOdds: "Share my odds",
