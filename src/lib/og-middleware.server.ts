@@ -40,9 +40,10 @@ async function generateLeagueOgImage(slug: string): Promise<Response> {
     const { data: lg } = await db.from("leagues").select("id, name").eq("slug", slug).maybeSingle();
 
     const leagueName = lg?.name ?? "Fantasy League";
-    let leader: { name: string } | null = null;
+    let top3: { name: string; total: number; rank: number }[] = [];
     let roundsPlayed = 0;
     let totalRounds = 0;
+    let playerCount = 0;
 
     if (lg) {
       const [{ data: rounds }, { data: players }] = await Promise.all([
@@ -50,8 +51,9 @@ async function generateLeagueOgImage(slug: string): Promise<Response> {
         db.from("players").select("id, name").eq("league_id", lg.id).order("display_order"),
       ]);
       totalRounds = (rounds ?? []).length;
+      playerCount = (players ?? []).length;
       const roundIds = (rounds ?? []).map((r: { id: string }) => r.id);
-      if (roundIds.length && (players ?? []).length) {
+      if (roundIds.length && playerCount) {
         const { data: scores } = await db
           .from("scores")
           .select("player_id, round_id, points")
@@ -72,16 +74,17 @@ async function generateLeagueOgImage(slug: string): Promise<Response> {
           scoreList.forEach((s) =>
             totals.set(s.player_id, (totals.get(s.player_id) ?? 0) + s.points),
           );
-          let best: { name: string; total: number } | null = null;
-          totals.forEach((total, pid) => {
-            if (!best || total > best.total) best = { name: nameMap.get(pid) ?? "", total };
-          });
-          leader = best;
+          top3 = Array.from(totals.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([pid, total], i) => ({ name: nameMap.get(pid) ?? "", total, rank: i + 1 }));
         }
       }
     }
 
-    const png = await makeOgPng(LeagueOgCard({ leagueName, leader, roundsPlayed, totalRounds }));
+    const png = await makeOgPng(
+      LeagueOgCard({ leagueName, top3, roundsPlayed, totalRounds, playerCount }),
+    );
     return new Response(Buffer.from(png), {
       headers: {
         "Content-Type": "image/png",
@@ -207,12 +210,15 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
 
 function LeagueOgCard(props: {
   leagueName: string;
-  leader: { name: string } | null;
+  top3: { name: string; total: number; rank: number }[];
   roundsPlayed: number;
   totalRounds: number;
+  playerCount: number;
 }) {
-  const { leagueName, leader, roundsPlayed, totalRounds } = props;
-  const hasData = roundsPlayed > 0 && leader;
+  const { leagueName, top3, roundsPlayed, totalRounds, playerCount } = props;
+  const hasData = roundsPlayed > 0 && top3.length > 0;
+  const progressPct = totalRounds > 0 ? Math.round((roundsPlayed / totalRounds) * 100) : 0;
+  const nameFontSize = leagueName.length > 28 ? "48px" : leagueName.length > 18 ? "56px" : "68px";
 
   return h(
     "div",
@@ -223,103 +229,128 @@ function LeagueOgCard(props: {
         width: "1200px",
         height: "630px",
         backgroundColor: BRAND_BLUE,
-        padding: "56px 64px",
+        padding: "52px 64px 48px",
         fontFamily: "Space Grotesk",
       },
     },
+    // ── top bar ──────────────────────────────────────────────────────────────
     h(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: "12px", marginBottom: "auto" } },
-      h("div", { style: { fontSize: "32px", lineHeight: "1" } }, "🏆"),
+      {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "48px",
+        },
+      },
       h(
         "span",
         {
           style: {
-            fontSize: "20px",
+            fontSize: "16px",
             fontWeight: 600,
             color: MUTED,
-            letterSpacing: "0.12em",
+            letterSpacing: "0.16em",
             textTransform: "uppercase",
           },
         },
         "Fantasy Tracker",
       ),
+      totalRounds > 0 &&
+        h(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              backgroundColor: SURFACE,
+              borderRadius: "8px",
+              padding: "8px 16px",
+            },
+          },
+          h("span", { style: { fontSize: "15px", fontWeight: 600, color: MUTED } }, "Round"),
+          h(
+            "span",
+            { style: { fontSize: "15px", fontWeight: 700, color: GOLD } },
+            `${roundsPlayed} / ${totalRounds}`,
+          ),
+        ),
     ),
+    // ── league name ──────────────────────────────────────────────────────────
     h(
       "div",
       {
         style: {
-          fontSize: leagueName.length > 24 ? "52px" : "64px",
+          fontSize: nameFontSize,
           fontWeight: 700,
           color: TEXT,
-          lineHeight: "1.1",
-          marginBottom: "24px",
-          maxWidth: "900px",
+          lineHeight: "1.08",
+          marginBottom: "40px",
+          maxWidth: "1000px",
         },
       },
       leagueName,
     ),
+    // ── standings ────────────────────────────────────────────────────────────
     hasData
       ? h(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: "32px" } },
-          h(
-            "div",
-            {
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                backgroundColor: SURFACE,
-                borderRadius: "12px",
-                padding: "16px 24px",
-              },
-            },
-            h("span", { style: { fontSize: "28px" } }, "🥇"),
+          { style: { display: "flex", gap: "16px", marginBottom: "auto" } },
+          ...top3.map((row, i) =>
             h(
               "div",
-              { style: { display: "flex", flexDirection: "column" } },
+              {
+                key: row.name,
+                style: {
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: i === 0 ? "1.4" : "1",
+                  backgroundColor: SURFACE,
+                  borderRadius: "14px",
+                  padding: "20px 24px",
+                  borderTop: `3px solid ${i === 0 ? ACCENT : "transparent"}`,
+                },
+              },
               h(
                 "span",
                 {
                   style: {
-                    fontSize: "14px",
-                    color: MUTED,
+                    fontSize: "12px",
                     fontWeight: 600,
+                    color: i === 0 ? ACCENT : MUTED,
                     textTransform: "uppercase",
-                    letterSpacing: "0.1em",
+                    letterSpacing: "0.12em",
+                    marginBottom: "8px",
                   },
                 },
-                "Leading",
+                i === 0 ? "Leader" : `#${row.rank}`,
               ),
-              h("span", { style: { fontSize: "32px", fontWeight: 700, color: TEXT } }, leader.name),
-            ),
-          ),
-          h(
-            "div",
-            { style: { display: "flex", flexDirection: "column", gap: "4px" } },
-            h(
-              "span",
-              {
-                style: {
-                  fontSize: "14px",
-                  color: MUTED,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
+              h(
+                "span",
+                {
+                  style: {
+                    fontSize: i === 0 ? "30px" : "24px",
+                    fontWeight: 700,
+                    color: TEXT,
+                    lineHeight: "1.1",
+                    marginBottom: "6px",
+                  },
                 },
-              },
-              "Progress",
-            ),
-            h(
-              "span",
-              { style: { fontSize: "32px", fontWeight: 700, color: GOLD } },
-              `${roundsPlayed}/${totalRounds}`,
-            ),
-            h(
-              "span",
-              { style: { fontSize: "14px", color: MUTED } },
-              `round${roundsPlayed === 1 ? "" : "s"} played`,
+                row.name,
+              ),
+              h(
+                "span",
+                {
+                  style: {
+                    fontSize: i === 0 ? "18px" : "15px",
+                    fontWeight: 600,
+                    color: i === 0 ? GOLD : MUTED,
+                  },
+                },
+                `${row.total} pts`,
+              ),
             ),
           ),
         )
@@ -336,21 +367,46 @@ function LeagueOgCard(props: {
           },
           h(
             "span",
-            { style: { fontSize: "14px", color: MUTED, fontWeight: 600 } },
-            totalRounds > 0
-              ? `${totalRounds} round${totalRounds === 1 ? "" : "s"} · Ready to play`
+            { style: { fontSize: "16px", color: MUTED, fontWeight: 600 } },
+            playerCount > 0
+              ? `${playerCount} players · ${totalRounds} rounds · Season not started`
               : "Just getting started",
           ),
         ),
-    h("div", {
-      style: {
-        height: "4px",
-        width: "120px",
-        backgroundColor: ACCENT,
-        borderRadius: "2px",
-        marginTop: "40px",
+    // ── footer progress bar ──────────────────────────────────────────────────
+    h(
+      "div",
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+          marginTop: "32px",
+        },
       },
-    }),
+      totalRounds > 0 &&
+        h(
+          "div",
+          {
+            style: {
+              display: "flex",
+              width: "100%",
+              height: "4px",
+              backgroundColor: SURFACE,
+              borderRadius: "2px",
+              overflow: "hidden",
+            },
+          },
+          h("div", {
+            style: {
+              width: `${progressPct}%`,
+              height: "4px",
+              backgroundColor: ACCENT,
+              borderRadius: "2px",
+            },
+          }),
+        ),
+    ),
   );
 }
 
