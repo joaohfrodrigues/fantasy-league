@@ -151,6 +151,9 @@ function LeagueBoard() {
   const [newRoundDraft, setNewRoundDraft] = useState<RoundDetailsInput>({ name: "", short: "" });
   const [removePlayerTarget, setRemovePlayerTarget] = useState<Player | null>(null);
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
+  // Separate from drinkPickerFor: the mobile sub-line renders its own DrinkCell,
+  // so it needs its own open state to avoid both instances opening the portal.
+  const [mobileDrinkPickerFor, setMobileDrinkPickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -422,6 +425,26 @@ function LeagueBoard() {
     });
     return m;
   }, [players, rounds, scoreMap]);
+
+  // Mobile reveals only the most recently played round columns, widening to show
+  // more as the viewport grows (lg shows all). Maps each round to its responsive
+  // visibility class by recency among played rounds; default keeps the lg-only
+  // behavior for older/unplayed rounds.
+  const roundColClassById = useMemo(() => {
+    const playedInOrder = rounds.filter((r) => roundMaxById.has(r.id));
+    const recency = new Map<string, number>();
+    playedInOrder.forEach((r, idx) => recency.set(r.id, playedInOrder.length - 1 - idx));
+    const byRecency = ["table-cell", "hidden sm:table-cell", "hidden md:table-cell"];
+    const m = new Map<string, string>();
+    rounds.forEach((r) => {
+      const rank = recency.get(r.id);
+      m.set(
+        r.id,
+        rank !== undefined && rank < byRecency.length ? byRecency[rank] : "hidden lg:table-cell",
+      );
+    });
+    return m;
+  }, [rounds, roundMaxById]);
 
   const standings = useMemo(() => {
     const withRank = [...baseStandings];
@@ -1191,7 +1214,7 @@ function LeagueBoard() {
               (mobile + tablet). Desktop shows lock state in the column headers instead. */}
           {rounds.length > 0 && (
             <div
-              className="lg:hidden mb-4 flex items-center gap-1.5 overflow-x-auto pb-1"
+              className="lg:hidden flex items-center gap-1 overflow-x-auto px-6 pt-4 pb-4"
               aria-label={t.board.roundsStatusLabel}
             >
               {rounds.map((r) => {
@@ -1207,7 +1230,7 @@ function LeagueBoard() {
                           ? t.board.roundInProgress(r.name)
                           : t.board.roundUpcoming(r.name)
                     }
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${
+                    className={`shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
                       locked
                         ? "bg-pitch/15 text-pitch"
                         : played
@@ -1216,9 +1239,9 @@ function LeagueBoard() {
                     }`}
                   >
                     {locked ? (
-                      <Lock className="size-3" aria-hidden="true" />
+                      <Lock className="size-2.5" aria-hidden="true" />
                     ) : played ? (
-                      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+                      <span className="size-1 rounded-full bg-current" aria-hidden="true" />
                     ) : null}
                     {r.short}
                   </span>
@@ -1233,7 +1256,7 @@ function LeagueBoard() {
                 <tr className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border/40">
                   <th className="text-left font-medium px-6 py-3 w-10">#</th>
                   <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
-                  <th className="text-left font-medium py-3">
+                  <th className="text-left font-medium py-3 hidden md:table-cell">
                     <button
                       type="button"
                       onClick={() => sortBy("prizes")}
@@ -1265,7 +1288,7 @@ function LeagueBoard() {
                   {rounds.map((r) => (
                     <th
                       key={r.id}
-                      className="text-center font-medium py-3 px-1.5 hidden lg:table-cell"
+                      className={`text-center font-medium py-3 px-1.5 ${roundColClassById.get(r.id) ?? "hidden lg:table-cell"}`}
                       title={r.name}
                     >
                       <button
@@ -1302,6 +1325,7 @@ function LeagueBoard() {
                   const isLeader = row.rank === 1 && row.agg > 0;
                   const dl = dinnerLabel(row.prob, players.length, t);
                   const isClaimed = claimedPlayerId === row.player.id;
+                  const wins = lockedWinsByPlayer.get(row.player.id) ?? 0;
                   return (
                     <tr
                       key={row.player.id}
@@ -1365,12 +1389,36 @@ function LeagueBoard() {
                             </button>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1 md:hidden">
-                          <span className="mr-1">{dl.emoji}</span>
-                          {dl.label} · {Math.round(row.prob * 100)}%
+                        <div className="text-xs text-muted-foreground mt-1 md:hidden flex items-center gap-1.5">
+                          {wins > 0 &&
+                            (unlocked ? (
+                              <DrinkCell
+                                player={row.player}
+                                wins={wins}
+                                openUp={i >= standings.length - 3}
+                                editable={unlocked}
+                                open={mobileDrinkPickerFor === row.player.id}
+                                onToggle={() =>
+                                  setMobileDrinkPickerFor((cur) =>
+                                    cur === row.player.id ? null : row.player.id,
+                                  )
+                                }
+                                onPick={(d) => setDrink(row.player.id, d)}
+                              />
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5">
+                                <span className="leading-none">{row.player.drink || "🥇"}</span>
+                                <span className="font-mono tabular-nums">×{wins}</span>
+                              </span>
+                            ))}
+                          {wins > 0 && <span aria-hidden="true">·</span>}
+                          <span>
+                            <span className="mr-1">{dl.emoji}</span>
+                            {Math.round(row.prob * 100)}%
+                          </span>
                         </div>
                       </td>
-                      <td className="py-4 align-top">
+                      <td className="py-4 align-top hidden md:table-cell">
                         <DrinkCell
                           player={row.player}
                           wins={lockedWinsByPlayer.get(row.player.id) ?? 0}
@@ -1397,7 +1445,7 @@ function LeagueBoard() {
                         return (
                           <td
                             key={rid}
-                            className="text-center font-mono text-xs lg:text-sm tabular-nums px-1.5 hidden lg:table-cell align-top py-4"
+                            className={`text-center font-mono text-xs lg:text-sm tabular-nums px-1.5 align-top py-4 ${roundColClassById.get(rid) ?? "hidden lg:table-cell"}`}
                           >
                             {v === null ? (
                               <span className="text-muted-foreground/30">—</span>
