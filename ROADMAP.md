@@ -37,6 +37,19 @@ Standalone items (smaller than an epic). Tagged `priority · size`.
       `entityType: "drink"`, and `exportLeague`/`importLeague` snapshot keys. Keep
       export snapshot back-compat (accept the old `drink` key on read). Own PR — it
       touches production data.
+- [ ] **Shared `StandingsTable` component** — `Low · M` — the live board
+      (`src/routes/$slug.tsx`) and the landing-page showcase
+      (`src/components/ExampleBoard.tsx`) duplicate the standings-table markup, so
+      every visual/responsive change must be made twice and drifts between them
+      (e.g. the mobile declutter shipped for the board in
+      [#14](https://github.com/joaohfrodrigues/fantasy-league/pull/14) had to be
+      re-applied to the example in
+      [#15](https://github.com/joaohfrodrigues/fantasy-league/pull/15)). Extract a
+      single presentational `StandingsTable` (rank, player + badges, round-prize/wins,
+      odds/dinner, per-round columns with the progressive-reveal logic, total) that
+      both feed via props: the live board passes real data + interactive cells (drink
+      picker, claim/share, sort, what-if), the example passes mock data + static cells.
+      Pure presentational extraction — keep behavior and visuals identical.
 - [ ] **What-if slider** — `Low · M` — replace per-round score entry in What-if mode
       with one slider per player over their **expected average** future score,
       defaulting to the player's current average. The slider sets the _mean_ only; the
