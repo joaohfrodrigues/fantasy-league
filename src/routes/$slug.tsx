@@ -30,6 +30,8 @@ import {
   FlaskConical,
   Scale,
   Menu,
+  Share2,
+  UserCheck,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -61,6 +63,17 @@ import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export const Route = createFileRoute("/$slug")({
+  head: ({ params }) => {
+    const site = import.meta.env.VITE_SITE_URL ?? "";
+    const ogImage = `${site}/api/og/${params.slug}`;
+    return {
+      meta: [
+        { property: "og:image", content: ogImage },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: ogImage },
+      ],
+    };
+  },
   component: LeagueBoard,
 });
 
@@ -135,6 +148,8 @@ function LeagueBoard() {
   const [removePlayerTarget, setRemovePlayerTarget] = useState<Player | null>(null);
   const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // What-if mode: layer hypothetical scores over future rounds to preview the
   // standings and winning odds. Purely client-side — never persisted.
@@ -167,6 +182,18 @@ function LeagueBoard() {
   useEffect(() => {
     setPassword(localStorage.getItem(pwKey));
   }, [pwKey]);
+
+  const claimKey = `row-claim:${slug}`;
+  useEffect(() => {
+    setClaimedPlayerId(localStorage.getItem(claimKey));
+  }, [claimKey]);
+
+  function toggleClaim(playerId: string) {
+    const next = claimedPlayerId === playerId ? null : playerId;
+    setClaimedPlayerId(next);
+    if (next) localStorage.setItem(claimKey, next);
+    else localStorage.removeItem(claimKey);
+  }
 
   // Reset the add-players draft each time the modal opens.
   useEffect(() => {
@@ -599,6 +626,26 @@ function LeagueBoard() {
     }
   }
 
+  async function shareMyOdds(playerId: string) {
+    const row = standings.find((r) => r.player.id === playerId);
+    if (!row || !league) return;
+    const text = t.board.shareOddsText(row.rank, Math.round(row.prob * 100), league.name);
+    const url = window.location.href;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: league.name, text, url });
+        return;
+      }
+    } catch {
+      // fall through
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
+  }
+
   async function changeTiebreak(next: TiebreakMode) {
     if (!password || !league || next === tiebreak) return;
     const prev = league;
@@ -682,6 +729,12 @@ function LeagueBoard() {
 
   return (
     <div className="min-h-screen">
+      {/* Clipboard copy feedback */}
+      {shareCopied && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-foreground text-background text-sm font-medium shadow-lg animate-in fade-in slide-in-from-bottom-3 duration-200">
+          {t.board.shareCopied}
+        </div>
+      )}
       {/* Header */}
       <header className="border-b border-border/40 backdrop-blur-sm sticky top-0 z-20 bg-background/70">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
@@ -1225,12 +1278,13 @@ function LeagueBoard() {
                 {standings.map((row, i) => {
                   const isLeader = row.rank === 1 && row.agg > 0;
                   const dl = dinnerLabel(row.prob, players.length, t);
+                  const isClaimed = claimedPlayerId === row.player.id;
                   return (
                     <tr
                       key={row.player.id}
                       className={`border-b border-border/30 last:border-0 hover:bg-surface-elevated/50 transition-colors ${
                         flashIds.has(row.player.id) ? "animate-row-flash" : ""
-                      }`}
+                      } ${isClaimed ? "bg-pitch/5" : ""}`}
                     >
                       <td className="px-6 py-4 text-muted-foreground tabular-nums align-top">
                         {isLeader ? (
@@ -1263,6 +1317,28 @@ function LeagueBoard() {
                               title={t.board.removePlayer}
                             >
                               <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => toggleClaim(row.player.id)}
+                            className={`transition-colors ${
+                              isClaimed
+                                ? "text-pitch"
+                                : "text-muted-foreground/30 hover:text-muted-foreground"
+                            }`}
+                            title={isClaimed ? t.board.unclaimRow : t.board.claimRow}
+                            aria-label={isClaimed ? t.board.unclaimRow : t.board.claimRow}
+                          >
+                            <UserCheck className="size-3.5" />
+                          </button>
+                          {isClaimed && (
+                            <button
+                              onClick={() => shareMyOdds(row.player.id)}
+                              className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                              title={t.board.shareMyOdds}
+                              aria-label={t.board.shareMyOdds}
+                            >
+                              <Share2 className="size-3.5" />
                             </button>
                           )}
                         </div>
@@ -2369,6 +2445,23 @@ function RoundEditor({
 
   const round = rounds.find((r) => r.id === currentId);
 
+  async function handleShareRound() {
+    const recapUrl = `${window.location.origin}/api/recap/${slug}/${currentId}`;
+    try {
+      if (typeof navigator !== "undefined" && "canShare" in navigator) {
+        const blob = await fetch(recapUrl).then((r) => r.blob());
+        const file = new File([blob], "round-recap.png", { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: round?.name ?? "" });
+          return;
+        }
+      }
+    } catch {
+      // fall through
+    }
+    window.open(recapUrl, "_blank");
+  }
+
   function openRoundEditor(mode: "new" | "current") {
     if (mode === "current") {
       if (!round) return;
@@ -2555,9 +2648,19 @@ function RoundEditor({
 
         <div className="px-6 py-4 max-h-[50vh] overflow-y-auto">
           {locked && (
-            <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground bg-surface-elevated/60 border border-border/40 rounded-lg px-3 py-2">
-              <Lock className="size-3.5 shrink-0 text-pitch" />
-              {t.board.roundLockedNote}
+            <div className="mb-4 flex items-center justify-between gap-2 text-xs text-muted-foreground bg-surface-elevated/60 border border-border/40 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Lock className="size-3.5 shrink-0 text-pitch" />
+                {t.board.roundLockedNote}
+              </div>
+              <button
+                onClick={handleShareRound}
+                title={t.board.shareRoundTitle}
+                className="flex items-center gap-1.5 shrink-0 text-pitch hover:text-pitch/80 font-medium transition-colors"
+              >
+                <Share2 className="size-3.5" />
+                {t.board.shareRound}
+              </button>
             </div>
           )}
           <div className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-4 gap-y-2 items-center">

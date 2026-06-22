@@ -333,5 +333,14 @@ export const en: Dict = {
     roundLabel: "Round",
     points: "Points",
     clearScore: "Clear score",
+
+    claimRow: "This is me",
+    unclaimRow: "Not me",
+    shareMyOdds: "Share my odds",
+    shareRound: "Share recap",
+    shareRoundTitle: "Share this round's recap card",
+    shareCopied: "Copied to clipboard",
+    shareOddsText: (rank: number, pct: number, leagueName: string) =>
+      `I'm ranked #${rank} in ${leagueName} with ${pct}% odds to win the prize! 🏆`,
   },
 };
