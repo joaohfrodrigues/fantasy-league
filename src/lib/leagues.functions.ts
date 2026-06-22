@@ -983,7 +983,13 @@ async function generateRoundSummary(
     totalRounds: roundList.length,
   };
 
-  const { text } = await getBanter(input).catch(() => ({ text: templatedBanter(input) }));
+  const { text, ai } = await getBanter(input).catch(() => ({
+    text: templatedBanter(input),
+    ai: false,
+  }));
+  console.log(
+    `[banter] round "${targetRound.name}" (league ${lg.name}): ${ai ? "AI (Gemini)" : "templated fallback"}`,
+  );
   // Bypass strict Supabase schema types until migration is applied and types regenerated.
   type RoundsSummaryUpdate = {
     update(d: { summary: string | null }): { eq(col: string, val: string): Promise<unknown> };

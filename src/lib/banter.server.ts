@@ -61,7 +61,10 @@ export function templatedBanter(input: BanterInput): string {
 
 async function callGemini(prompt: string): Promise<string | null> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.warn("[banter] GOOGLE_AI_API_KEY not set — using templated fallback");
+    return null;
+  }
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
@@ -81,13 +84,18 @@ async function callGemini(prompt: string): Promise<string | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[banter] Gemini request failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
     const json = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const text = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text) console.warn("[banter] Gemini returned no text — using templated fallback");
     return text || null;
-  } catch {
+  } catch (err) {
+    console.error("[banter] Gemini call threw:", err);
     return null;
   }
 }
