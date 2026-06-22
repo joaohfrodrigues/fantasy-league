@@ -110,7 +110,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     const [{ data: rounds }, { data: players }] = await Promise.all([
       db
         .from("rounds")
-        .select("id, name, locked_at, display_order, summary")
+        .select("id, name, locked_at, display_order, summary_en")
         .eq("league_id", lg.id)
         .order("display_order"),
       db
@@ -124,7 +124,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
       name: string;
       locked_at: string | null;
       display_order: number;
-      summary: string | null;
+      summary_en: string | null;
     };
     type PP = { id: string; name: string; display_order: number; drink: string };
     const roundList = (rounds ?? []) as unknown as PR[];
@@ -164,8 +164,9 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
         : null;
     const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
 
-    // Use the stored summary (generated on lock) or fall back to templated banter.
-    let banterText = targetRound.summary;
+    // The shared image uses the English summary (its labels are English) or
+    // falls back to templated banter.
+    let banterText = targetRound.summary_en;
     if (!banterText) {
       const { templatedBanter } = await import("./banter.server");
       const playedRounds = roundList.filter((r) => roundMaxes.has(r.id));
@@ -183,20 +184,23 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
         score: scoreOf,
         tiebreak,
       });
-      banterText = templatedBanter({
-        leagueId: lg.id,
-        roundId,
-        leagueName: lg.name,
-        roundName: targetRound.name,
-        roundWinner,
-        standings: standingRows
-          .sort((a, b) => a.rank - b.rank)
-          .map((r) => ({ name: r.player.name, total: r.agg, rank: r.rank, prob: r.prob })),
-        recentRounds,
-        badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
-        roundsPlayed,
-        totalRounds: roundList.length,
-      });
+      banterText = templatedBanter(
+        {
+          leagueId: lg.id,
+          roundId,
+          leagueName: lg.name,
+          roundName: targetRound.name,
+          roundWinner,
+          standings: standingRows
+            .sort((a, b) => a.rank - b.rank)
+            .map((r) => ({ name: r.player.name, total: r.agg, rank: r.rank, prob: r.prob })),
+          recentRounds,
+          badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
+          roundsPlayed,
+          totalRounds: roundList.length,
+        },
+        "en",
+      );
     }
 
     const standingsForCard = standingRows

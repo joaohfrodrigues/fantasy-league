@@ -983,8 +983,9 @@ async function generateRoundSummary(
     totalRounds: roundList.length,
   };
 
-  const { text, ai } = await getBanter(input).catch(() => ({
-    text: templatedBanter(input),
+  const { en, pt, ai } = await getBanter(input).catch(() => ({
+    en: templatedBanter(input, "en"),
+    pt: templatedBanter(input, "pt"),
     ai: false,
   }));
   console.log(
@@ -992,10 +993,12 @@ async function generateRoundSummary(
   );
   // Bypass strict Supabase schema types until migration is applied and types regenerated.
   type RoundsSummaryUpdate = {
-    update(d: { summary: string | null }): { eq(col: string, val: string): Promise<unknown> };
+    update(d: { summary_en: string | null; summary_pt: string | null }): {
+      eq(col: string, val: string): Promise<unknown>;
+    };
   };
   await (admin.from("rounds") as unknown as RoundsSummaryUpdate)
-    .update({ summary: text })
+    .update({ summary_en: en, summary_pt: pt })
     .eq("id", roundId);
 }
 

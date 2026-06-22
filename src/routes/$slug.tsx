@@ -32,6 +32,7 @@ import {
   Menu,
   Share2,
   UserCheck,
+  Sparkles,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -52,7 +53,7 @@ import {
   updateTiebreak as updateTiebreakFn,
   type AuditEntry,
 } from "@/lib/leagues.functions";
-import { useT, type Dict } from "@/lib/i18n";
+import { useT, useLocale, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
@@ -84,7 +85,8 @@ type Round = {
   short: string;
   display_order: number;
   locked_at: string | null;
-  summary?: string | null;
+  summary_en?: string | null;
+  summary_pt?: string | null;
 };
 type Player = { id: string; name: string; display_order: number; drink: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
@@ -126,6 +128,7 @@ function parseDraftPoints(value: string): number | null {
 function LeagueBoard() {
   const { slug } = useParams({ from: "/$slug" });
   const t = useT();
+  const { locale } = useLocale();
   const pwKey = `league:${slug}:pw`;
 
   const [league, setLeague] = useState<League | null>(null);
@@ -444,13 +447,15 @@ function LeagueBoard() {
     return withRank;
   }, [baseStandings, roundIndexById, sortKey, sortDir, lockedWinsByPlayer]);
 
-  // Most recently locked round that has a generated summary.
+  // Most recently locked round that has a generated summary, in the current locale.
   const latestSummary = useMemo(() => {
+    const pick = (r: Round) => (locale === "pt" ? r.summary_pt : r.summary_en) ?? r.summary_en;
     const locked = rounds
-      .filter((r) => r.locked_at !== null && r.summary)
+      .filter((r) => r.locked_at !== null && pick(r))
       .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime());
-    return locked[0] ?? null;
-  }, [rounds]);
+    const round = locked[0];
+    return round ? { name: round.name, text: pick(round)! } : null;
+  }, [rounds, locale]);
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -961,11 +966,12 @@ function LeagueBoard() {
           {t.board.heroFootnote}
         </p>
         {latestSummary && (
-          <div className="mt-8 max-w-2xl rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-4 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-pitch mb-2">
+          <div className="mt-8 rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-5 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch mb-2">
+              <Sparkles className="size-3.5" aria-hidden="true" />
               {t.board.afterRound(latestSummary.name)}
             </p>
-            <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.summary}</p>
+            <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.text}</p>
           </div>
         )}
       </section>
