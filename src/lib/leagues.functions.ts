@@ -886,7 +886,7 @@ async function generateRoundSummary(
     admin.from("leagues").select("id, name, tiebreak").eq("id", leagueId).maybeSingle(),
     admin
       .from("rounds")
-      .select("id, name, locked_at, display_order")
+      .select("id, name, short, locked_at, display_order")
       .eq("league_id", leagueId)
       .order("display_order"),
     admin
@@ -903,7 +903,13 @@ async function generateRoundSummary(
     .select("player_id, round_id, points")
     .in("round_id", roundIds);
 
-  type PR = { id: string; name: string; locked_at: string | null; display_order: number };
+  type PR = {
+    id: string;
+    name: string;
+    short: string;
+    locked_at: string | null;
+    display_order: number;
+  };
   type PP = { id: string; name: string; display_order: number; drink: string };
   type PS = { player_id: string; round_id: string; points: number };
 
@@ -915,10 +921,9 @@ async function generateRoundSummary(
 
   const scoreOf = (pid: string, rid: string) =>
     scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
-  const roundsWithLock = roundList.map((r) => ({ id: r.id, locked: r.locked_at !== null }));
-
   const { computeStandings, computeRoundMaxes } = await import("./standings");
-  const { simulateWinProbability } = await import("./simulation");
+  const { simulateWinProbability, toSimRound } = await import("./simulation");
+  const roundsWithLock = roundList.map(toSimRound);
   const { assignBadges } = await import("./badges");
   const { getBanter, templatedBanter } = await import("./banter.server");
 

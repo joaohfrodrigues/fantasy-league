@@ -56,7 +56,7 @@ import {
 import { useT, useLocale, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
-import { simulateWinProbability, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
+import { simulateWinProbability, toSimRound, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
 import { assignBadges } from "@/lib/badges";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
@@ -367,10 +367,7 @@ function LeagueBoard() {
   );
 
   // Rounds with lock state, for the lock-aware simulation and badges.
-  const roundsWithLock = useMemo(
-    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null })),
-    [rounds],
-  );
+  const roundsWithLock = useMemo(() => rounds.map(toSimRound), [rounds]);
 
   // Monte Carlo win probability (see src/lib/simulation.ts). Lock-aware: locked
   // rounds are banked, unlocked rounds are re-simulated. Live (uses simMap = saved
