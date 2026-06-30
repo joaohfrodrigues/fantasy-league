@@ -13,7 +13,7 @@ import {
 } from "./og-image.server";
 import { computeStandings, computeRoundMaxes } from "./standings";
 import { assignBadges } from "./badges";
-import { simulateWinProbability } from "./simulation";
+import { simulateWinProbability, toSimRound } from "./simulation";
 
 export async function handleOgRequest(pathname: string): Promise<Response | null> {
   const ogMatch = pathname.match(/^\/api\/og\/([^/]+)$/);
@@ -110,7 +110,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     const [{ data: rounds }, { data: players }] = await Promise.all([
       db
         .from("rounds")
-        .select("id, name, locked_at, display_order, summary_en")
+        .select("id, name, short, locked_at, display_order, summary_en")
         .eq("league_id", lg.id)
         .order("display_order"),
       db
@@ -122,6 +122,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     type PR = {
       id: string;
       name: string;
+      short: string;
       locked_at: string | null;
       display_order: number;
       summary_en: string | null;
@@ -141,7 +142,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     const tiebreak = (lg.tiebreak as "total" | "wins" | "latest") ?? "total";
     const scoreOf = (pid: string, rid: string) =>
       scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
-    const roundsWithLock = roundList.map((r) => ({ id: r.id, locked: r.locked_at !== null }));
+    const roundsWithLock = roundList.map(toSimRound);
     const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
     const winProbability = simulateWinProbability({
       players: playerList,
