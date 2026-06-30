@@ -946,10 +946,10 @@ async function generateRoundSummary(
   });
 
   const roundMax = roundMaxes.get(roundId);
-  const roundWinner =
-    roundMax !== undefined
-      ? (playerList.find((p) => scoreOf(p.id, roundId) === roundMax)?.name ?? null)
-      : null;
+  const roundWinnerPlayer =
+    roundMax !== undefined ? playerList.find((p) => scoreOf(p.id, roundId) === roundMax) : null;
+  const roundWinner = roundWinnerPlayer?.name ?? null;
+  const roundPrize = roundWinnerPlayer?.drink ?? null;
   const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
 
   // Build round history for context (all played rounds up to and including this one)
@@ -963,12 +963,23 @@ async function generateRoundSummary(
     return { roundName: r.name, winner };
   });
 
+  const upcomingRounds = roundList.filter((r) => !roundMaxes.has(r.id)).map((r) => r.name);
+
+  // Detect leader change: compare pre-round leader (by total excluding this round) vs post-round
+  const preRoundLeader = [...standingRows].sort(
+    (a, b) =>
+      b.agg - (scoreOf(b.player.id, roundId) ?? 0) - (a.agg - (scoreOf(a.player.id, roundId) ?? 0)),
+  )[0]?.player.name;
+  const postRoundLeader = standingRows.find((r) => r.rank === 1)?.player.name;
+  const leaderChanged = !!preRoundLeader && preRoundLeader !== postRoundLeader;
+
   const input = {
     leagueId: lg.id,
     roundId,
     leagueName: lg.name,
     roundName: targetRound.name,
     roundWinner,
+    roundPrize,
     standings: standingRows
       .sort((a, b) => a.rank - b.rank)
       .map((r) => ({
@@ -976,11 +987,15 @@ async function generateRoundSummary(
         total: r.agg,
         rank: r.rank,
         prob: r.prob,
+        wins: r.wins,
+        roundScore: scoreOf(r.player.id, roundId) ?? null,
       })),
     recentRounds,
+    upcomingRounds,
     badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
     roundsPlayed,
     totalRounds: roundList.length,
+    leaderChanged,
   };
 
   const { en, pt, ai } = await getBanter(input).catch(() => ({

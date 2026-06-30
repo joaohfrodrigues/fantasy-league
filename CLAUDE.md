@@ -8,8 +8,7 @@ source of truth** for project rules. `.github/copilot-instructions.md` points he
 Fantasy Tracker — tracks round-by-round results for soccer fantasy leagues and
 estimates each participant's chance of winning. Started as a World Cup 2026
 tracker for a group of friends, generalized for any soccer fantasy league.
-See [README.md](README.md) for the user-facing overview and [ROADMAP.md](ROADMAP.md)
-for direction.
+See [README.md](README.md) for the user-facing overview.
 
 ## Stack
 
@@ -25,6 +24,8 @@ bun run build            # app-level build check (use to validate changes)
 bunx tsc --noEmit        # stricter TypeScript validation
 bun run lint             # eslint (may fail on pre-existing issues; lint touched files)
 bun run format           # prettier --write .
+bun run test             # run tests once (vitest, node environment)
+bun run test:watch       # vitest in watch mode
 bun run admin:change-password   # admin script to change a league password
 ```
 

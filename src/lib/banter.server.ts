@@ -10,13 +10,28 @@ export type BanterInput = {
   leagueName: string;
   roundName: string;
   roundWinner: string | null;
+  /** Drink/prize earned by the round winner; null if no winner or no prize set. */
+  roundPrize: string | null;
   /** Full current standings after this round, sorted by rank. */
-  standings: { name: string; total: number; rank: number; prob: number }[];
+  standings: {
+    name: string;
+    total: number;
+    rank: number;
+    prob: number;
+    /** Number of rounds this player has won. */
+    wins: number;
+    /** This player's score in the round just finished. */
+    roundScore: number | null;
+  }[];
   /** All rounds played so far, newest last. */
   recentRounds: { roundName: string; winner: string | null }[];
+  /** Names of rounds not yet played, in display order. */
+  upcomingRounds: string[];
   badges: { player: string; badges: BadgeId[] }[];
   roundsPlayed: number;
   totalRounds: number;
+  /** True when the overall league leader changed as a result of this round. */
+  leaderChanged: boolean;
 };
 
 export type BanterLocale = "en" | "pt";
@@ -100,7 +115,19 @@ async function callGemini(prompt: string): Promise<{ en: string; pt: string } | 
       systemInstruction: {
         parts: [
           {
-            text: "You are a ruthless fantasy football pundit — sharp, funny, no mercy. You write a short post-round summary for a league of friends. Praise whoever is winning, roast whoever is losing. Be specific about players by name. Keep it to 3 sentences max. No hashtags, no emojis, no filler like 'Alright folks'. Just the pundit take. Produce the SAME take in two languages: 'en' (English) and 'pt' (European Portuguese, pt-PT — not Brazilian). Both must read naturally and idiomatically, not as a literal translation of each other.",
+            text: [
+              "You are a ruthless fantasy football pundit — sharp, funny, no mercy.",
+              "You write a short post-round summary for a private league of friends.",
+              "Rules:",
+              "- Name the round winner and their score. If a round prize is listed, mention it once as a reward they earned — it is a positive thing, not a penalty.",
+              "- Contrast the overall league leader's win probability against the closest challenger — use the point margin and the % to win.",
+              "- Name and roast the last-place player.",
+              "- If the league leader changed this round, call it out as a notable moment.",
+              "- If upcoming rounds are listed, reference the next one to frame what's at stake.",
+              "- If badges are listed (onFire, onRise, bottler, ghost), weave them in naturally.",
+              "- Maximum 3 sentences. No hashtags, no emojis, no filler like 'Alright folks' or 'Well well well'. Just the pundit take.",
+              "Output JSON with two fields: 'en' (British English) and 'pt' (European Portuguese, pt-PT — informal, expressive, idiomatically natural; not Brazilian Portuguese, not a literal translation of the English).",
+            ].join(" "),
           },
         ],
       },
@@ -146,22 +173,41 @@ async function callGemini(prompt: string): Promise<{ en: string; pt: string } | 
   }
 }
 
-function buildPrompt(input: BanterInput): string {
+export function buildPrompt(input: BanterInput): string {
   const {
     leagueName,
     roundName,
     roundWinner,
+    roundPrize,
     standings,
     recentRounds,
+    upcomingRounds,
     badges,
     roundsPlayed,
     totalRounds,
+    leaderChanged,
   } = input;
   const remaining = totalRounds - roundsPlayed;
 
+  const leader = standings[0];
+  const runnerUp = standings[1];
+  const leaderMargin = leader && runnerUp ? leader.total - runnerUp.total : null;
+
   const standingLines = standings
-    .map((s) => `#${s.rank} ${s.name} — ${s.total} pts (${Math.round(s.prob * 100)}% to win)`)
+    .map((s) => {
+      const scoreNote = s.roundScore !== null ? `, scored ${s.roundScore} this round` : "";
+      return `#${s.rank} ${s.name} — ${s.total} pts (${Math.round(s.prob * 100)}% to win, ${s.wins} round win${s.wins === 1 ? "" : "s"}${scoreNote})`;
+    })
     .join("; ");
+
+  const marginNote =
+    leaderMargin !== null && runnerUp
+      ? `${leader.name} leads ${runnerUp.name} by ${leaderMargin} point${leaderMargin === 1 ? "" : "s"}.`
+      : null;
+
+  const winnerNote = roundWinner
+    ? `Winner: ${roundWinner}${roundPrize ? ` (round prize: ${roundPrize})` : ""}.`
+    : "Winner: none.";
 
   const historyLines =
     recentRounds.length > 1
@@ -171,6 +217,11 @@ function buildPrompt(input: BanterInput): string {
           .join(", ")
       : null;
 
+  const upcomingNote =
+    upcomingRounds.length > 0
+      ? `Next rounds: ${upcomingRounds.join(", ")}.`
+      : "This is the final round.";
+
   const badgeLines = badges
     .filter((b) => b.badges.length > 0)
     .map((b) => `${b.player}: ${b.badges.join(", ")}`)
@@ -178,11 +229,15 @@ function buildPrompt(input: BanterInput): string {
 
   return [
     `League: ${leagueName}. ${roundsPlayed} of ${totalRounds} rounds played, ${remaining} remaining.`,
-    `Round just finished: ${roundName}. Winner: ${roundWinner ?? "none"}.`,
-    `Current standings: ${standingLines}.`,
-    historyLines ? `Previous rounds: ${historyLines}.` : null,
-    badgeLines ? `Badges this round: ${badgeLines}.` : null,
-    "Write the post-round pundit take, focusing on this round's result and overall standings.",
+    `Round just finished: ${roundName}. ${winnerNote}`,
+    leaderChanged && leader
+      ? `League leader changed this round — ${leader.name} is the new leader.`
+      : null,
+    `Current standings (after this round): ${standingLines}.`,
+    marginNote,
+    upcomingNote,
+    historyLines ? `Previous round winners: ${historyLines}.` : null,
+    badgeLines ? `Badges earned: ${badgeLines}.` : null,
   ]
     .filter(Boolean)
     .join(" ");
