@@ -58,6 +58,7 @@ import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { simulateWinProbability, toSimRound, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
+import { computeH2H } from "@/lib/h2h";
 import { assignBadges } from "@/lib/badges";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
@@ -155,6 +156,7 @@ function LeagueBoard() {
   // so it needs its own open state to avoid both instances opening the portal.
   const [mobileRoundPrizePickerFor, setMobileRoundPrizePickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showH2H, setShowH2H] = useState(false);
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -790,6 +792,16 @@ function LeagueBoard() {
           {/* Desktop action row — hidden on mobile */}
           <div className="hidden md:flex items-center gap-2">
             <LanguageToggle />
+            {players.length >= 2 && (
+              <button
+                onClick={() => setShowH2H(true)}
+                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                title={t.board.h2hTitle}
+                aria-label={t.board.h2h}
+              >
+                <Swords className="size-3.5" />
+              </button>
+            )}
             {unlocked && (
               <button
                 onClick={() => setEditingLeagueName(true)}
@@ -913,6 +925,17 @@ function LeagueBoard() {
                   {league?.name}
                 </div>
                 <div className="flex flex-col gap-1">
+                  {players.length >= 2 && (
+                    <DrawerClose asChild>
+                      <button
+                        onClick={() => setShowH2H(true)}
+                        className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-sm font-medium bg-surface-elevated/50 hover:bg-accent transition-colors"
+                      >
+                        <Swords className="size-4 text-muted-foreground" />
+                        {t.board.h2h}
+                      </button>
+                    </DrawerClose>
+                  )}
                   {unlocked && (
                     <DrawerClose asChild>
                       <button
@@ -1583,6 +1606,16 @@ function LeagueBoard() {
           rounds={rounds}
           onClose={() => setShowHistory(false)}
           onAuthFailure={handleAuthFailure}
+        />
+      )}
+
+      {showH2H && (
+        <H2HModal
+          players={players}
+          rounds={rounds}
+          scoreMap={scoreMap}
+          claimedPlayerId={claimedPlayerId}
+          onClose={() => setShowH2H(false)}
         />
       )}
 
@@ -2457,6 +2490,141 @@ function HistoryModal({
             </li>
           ))}
         </ul>
+      )}
+    </Modal>
+  );
+}
+
+function H2HModal({
+  players,
+  rounds,
+  scoreMap,
+  claimedPlayerId,
+  onClose,
+}: Readonly<{
+  players: Player[];
+  rounds: Round[];
+  scoreMap: Map<string, number>;
+  claimedPlayerId: string | null;
+  onClose: () => void;
+}>) {
+  const t = useT();
+  const otherPlayer = (excludeId: string | null) =>
+    players.find((p) => p.id !== excludeId)?.id ?? null;
+  const [playerAId, setPlayerAId] = useState<string | null>(
+    claimedPlayerId ?? players[0]?.id ?? null,
+  );
+  const [playerBId, setPlayerBId] = useState<string | null>(
+    otherPlayer(claimedPlayerId ?? players[0]?.id ?? null),
+  );
+
+  const lockedRounds = useMemo(() => rounds.filter((r) => r.locked_at !== null), [rounds]);
+  const roundLabelById = useMemo(
+    () => new Map(rounds.map((r) => [r.id, r.short || r.name])),
+    [rounds],
+  );
+  const playerById = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
+  const score = useCallback(
+    (pid: string, rid: string) => scoreMap.get(`${pid}:${rid}`),
+    [scoreMap],
+  );
+
+  const samePlayer = playerAId !== null && playerAId === playerBId;
+  const summary = useMemo(() => {
+    if (!playerAId || !playerBId || samePlayer) return null;
+    return computeH2H({ playerAId, playerBId, rounds: lockedRounds, score });
+  }, [playerAId, playerBId, samePlayer, lockedRounds, score]);
+
+  return (
+    <Modal onClose={onClose} title={t.board.h2hTitle}>
+      <p className="text-xs text-muted-foreground -mt-3 mb-4">{t.board.h2hSubtitle}</p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <select
+          value={playerAId ?? ""}
+          onChange={(e) => setPlayerAId(e.target.value || null)}
+          aria-label={t.board.h2hPlayerA}
+          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
+        >
+          {players.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={playerBId ?? ""}
+          onChange={(e) => setPlayerBId(e.target.value || null)}
+          aria-label={t.board.h2hPlayerB}
+          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
+        >
+          {players.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {samePlayer && (
+        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hPickTwo}</p>
+      )}
+
+      {!samePlayer && lockedRounds.length === 0 && (
+        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hNoRounds}</p>
+      )}
+
+      {!samePlayer && summary && summary.rounds.length > 0 && (
+        <div className="mt-5">
+          <div className="text-center">
+            <div className="font-display text-2xl font-semibold">
+              {t.board.h2hRecord(summary.aWins, summary.bWins, summary.draws)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t.board.h2hRoundsCompared(summary.rounds.length)}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 px-1">
+            <div>
+              <div className="text-xs text-muted-foreground">{playerById.get(playerAId!)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums">
+                {summary.aTotal}
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wide">
+              {t.board.h2hTotalPoints}
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">{playerById.get(playerBId!)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums">
+                {summary.bTotal}
+              </div>
+            </div>
+          </div>
+
+          <ul className="max-h-[40vh] overflow-y-auto mt-5 -mx-1 px-1 divide-y divide-border/40">
+            {summary.rounds.map((r) => (
+              <li key={r.roundId} className="flex items-center justify-between gap-3 py-2.5">
+                <span className="text-sm">{roundLabelById.get(r.roundId) ?? r.roundId}</span>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {r.aScore} – {r.bScore}
+                </span>
+                <span
+                  className={`text-xs font-medium tabular-nums w-16 text-right ${
+                    r.winner === "a"
+                      ? "text-pitch"
+                      : r.winner === "b"
+                        ? "text-[color:oklch(0.7_0.2_25)]"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {r.winner === "draw" ? t.board.h2hDraw : `${r.delta > 0 ? "+" : ""}${r.delta}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Modal>
   );

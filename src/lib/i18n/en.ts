@@ -344,5 +344,18 @@ export const en: Dict = {
     shareCopied: "Copied to clipboard",
     shareOddsText: (rank: number, pct: number, leagueName: string) =>
       `I'm ranked #${rank} in ${leagueName} with ${pct}% odds to win the prize! 🏆`,
+
+    h2h: "Head to head",
+    h2hTitle: "Head to head",
+    h2hSubtitle: "Compare two players across every locked round.",
+    h2hPlayerA: "Player A",
+    h2hPlayerB: "Player B",
+    h2hPickTwo: "Pick two different players to compare.",
+    h2hNoRounds: "No locked rounds yet — check back once the first round is locked.",
+    h2hRecord: (aWins: number, bWins: number, draws: number) =>
+      `${aWins}–${bWins}–${draws} (W–L–D)`,
+    h2hTotalPoints: "Total points",
+    h2hRoundsCompared: (n: number) => `${n} ${n === 1 ? "round" : "rounds"} compared`,
+    h2hDraw: "draw",
   },
 };
