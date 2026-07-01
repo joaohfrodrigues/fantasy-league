@@ -351,6 +351,19 @@ export const pt = {
     shareCopied: "Copiado para a área de transferência",
     shareOddsText: (rank: number, pct: number, leagueName: string) =>
       `Estou em ${rank}.º lugar em ${leagueName} com ${pct}% de probabilidade de ganhar o prémio! 🏆`,
+
+    h2h: "Frente a frente",
+    h2hTitle: "Frente a frente",
+    h2hSubtitle: "Compara dois jogadores em todas as rondas fechadas.",
+    h2hPlayerA: "Jogador A",
+    h2hPlayerB: "Jogador B",
+    h2hPickTwo: "Escolhe dois jogadores diferentes para comparar.",
+    h2hNoRounds: "Ainda não há rondas fechadas — volta depois de a primeira ronda fechar.",
+    h2hRecord: (aWins: number, bWins: number, draws: number) =>
+      `${aWins}–${bWins}–${draws} (V–D–E)`,
+    h2hTotalPoints: "Pontos totais",
+    h2hRoundsCompared: (n: number) => `${n} ${n === 1 ? "ronda comparada" : "rondas comparadas"}`,
+    h2hDraw: "empate",
   },
 };
 
