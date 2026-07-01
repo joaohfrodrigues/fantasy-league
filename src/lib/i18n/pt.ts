@@ -239,7 +239,7 @@ export const pt = {
           return `Jogador adicionado: ${e.player}`;
         case "player:DELETE":
           return `Jogador removido: ${e.player}`;
-        case "drink:UPDATE":
+        case "round_prize:UPDATE":
           return `Prémio de ${e.player}: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         case "league:UPDATE":
           return `Liga renomeada: ${e.from ?? "—"} → ${e.to ?? "—"}`;

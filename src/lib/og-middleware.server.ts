@@ -14,6 +14,7 @@ import {
 import { computeStandings, computeRoundMaxes } from "./standings";
 import { assignBadges } from "./badges";
 import { simulateWinProbability, toSimRound } from "./simulation";
+import type { PlayerRow } from "./leagues.functions";
 
 export async function handleOgRequest(pathname: string): Promise<Response | null> {
   const ogMatch = pathname.match(/^\/api\/og\/([^/]+)$/);
@@ -115,7 +116,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
         .order("display_order"),
       db
         .from("players")
-        .select("id, name, display_order, drink")
+        .select("id, name, display_order, round_prize")
         .eq("league_id", lg.id)
         .order("display_order"),
     ]);
@@ -127,9 +128,8 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
       display_order: number;
       summary_en: string | null;
     };
-    type PP = { id: string; name: string; display_order: number; drink: string };
     const roundList = (rounds ?? []) as unknown as PR[];
-    const playerList = (players ?? []) as PP[];
+    const playerList = (players ?? []) as unknown as PlayerRow[];
     const roundIds = roundList.map((r) => r.id);
     const { data: scores } = roundIds.length
       ? await db.from("scores").select("player_id, round_id, points").in("round_id", roundIds)
@@ -200,7 +200,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
           leagueName: lg.name,
           roundName: targetRound.name,
           roundWinner,
-          roundPrize: roundWinnerPlayer?.drink ?? null,
+          roundPrize: roundWinnerPlayer?.round_prize ?? null,
           standings: standingRows
             .sort((a, b) => a.rank - b.rank)
             .map((r) => ({
