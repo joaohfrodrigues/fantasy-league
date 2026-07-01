@@ -44,7 +44,7 @@ import {
   addRound as addRoundFn,
   deleteRound as deleteRoundFn,
   updateRound as updateRoundFn,
-  setDrink as setDrinkFn,
+  setRoundPrize as setRoundPrizeFn,
   saveScores as saveScoresFn,
   lockRound as lockRoundFn,
   unlockRound as unlockRoundFn,
@@ -88,7 +88,7 @@ type Round = {
   summary_en?: string | null;
   summary_pt?: string | null;
 };
-type Player = { id: string; name: string; display_order: number; drink: string };
+type Player = { id: string; name: string; display_order: number; round_prize: string };
 type Score = { id: string; player_id: string; round_id: string; points: number };
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -150,10 +150,10 @@ function LeagueBoard() {
   const [creatingRoundSave, setCreatingRoundSave] = useState(false);
   const [newRoundDraft, setNewRoundDraft] = useState<RoundDetailsInput>({ name: "", short: "" });
   const [removePlayerTarget, setRemovePlayerTarget] = useState<Player | null>(null);
-  const [drinkPickerFor, setDrinkPickerFor] = useState<string | null>(null);
-  // Separate from drinkPickerFor: the mobile sub-line renders its own DrinkCell,
+  const [roundPrizePickerFor, setRoundPrizePickerFor] = useState<string | null>(null);
+  // Separate from roundPrizePickerFor: the mobile sub-line renders its own RoundPrizeCell,
   // so it needs its own open state to avoid both instances opening the portal.
-  const [mobileDrinkPickerFor, setMobileDrinkPickerFor] = useState<string | null>(null);
+  const [mobileRoundPrizePickerFor, setMobileRoundPrizePickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -231,7 +231,8 @@ function LeagueBoard() {
       : { data: [] as Score[] };
     setLeague(lg as League);
     setRounds((r ?? []) as unknown as Round[]);
-    setPlayers((p ?? []) as Player[]);
+    // Bypass strict Supabase schema types until migration is applied and types regenerated.
+    setPlayers((p ?? []) as unknown as Player[]);
     setScores((s ?? []) as Score[]);
     setLoading(false);
     recordRecentLeague(lg.slug, lg.name);
@@ -576,12 +577,12 @@ function LeagueBoard() {
     }
   }
 
-  async function setDrink(playerId: string, drink: string) {
+  async function setRoundPrize(playerId: string, roundPrize: string) {
     if (!password) return;
-    setDrinkPickerFor(null);
-    setPlayers((ps) => ps.map((p) => (p.id === playerId ? { ...p, drink } : p)));
+    setRoundPrizePickerFor(null);
+    setPlayers((ps) => ps.map((p) => (p.id === playerId ? { ...p, round_prize: roundPrize } : p)));
     try {
-      await setDrinkFn({ data: { slug, password, playerId, drink } });
+      await setRoundPrizeFn({ data: { slug, password, playerId, roundPrize } });
     } catch (err) {
       if (isAuthError(err)) handleAuthFailure();
       loadAll();
@@ -1389,22 +1390,24 @@ function LeagueBoard() {
                         <div className="text-xs text-muted-foreground mt-1 md:hidden flex items-center gap-1.5">
                           {wins > 0 &&
                             (unlocked ? (
-                              <DrinkCell
+                              <RoundPrizeCell
                                 player={row.player}
                                 wins={wins}
                                 openUp={i >= standings.length - 3}
                                 editable={unlocked}
-                                open={mobileDrinkPickerFor === row.player.id}
+                                open={mobileRoundPrizePickerFor === row.player.id}
                                 onToggle={() =>
-                                  setMobileDrinkPickerFor((cur) =>
+                                  setMobileRoundPrizePickerFor((cur) =>
                                     cur === row.player.id ? null : row.player.id,
                                   )
                                 }
-                                onPick={(d) => setDrink(row.player.id, d)}
+                                onPick={(d) => setRoundPrize(row.player.id, d)}
                               />
                             ) : (
                               <span className="inline-flex items-center gap-0.5">
-                                <span className="leading-none">{row.player.drink || "🥇"}</span>
+                                <span className="leading-none">
+                                  {row.player.round_prize || "🥇"}
+                                </span>
                                 <span className="font-mono tabular-nums">×{wins}</span>
                               </span>
                             ))}
@@ -1416,18 +1419,18 @@ function LeagueBoard() {
                         </div>
                       </td>
                       <td className="py-4 align-top hidden md:table-cell">
-                        <DrinkCell
+                        <RoundPrizeCell
                           player={row.player}
                           wins={lockedWinsByPlayer.get(row.player.id) ?? 0}
                           openUp={i >= standings.length - 3}
                           editable={unlocked}
-                          open={drinkPickerFor === row.player.id}
+                          open={roundPrizePickerFor === row.player.id}
                           onToggle={() =>
-                            setDrinkPickerFor((cur) =>
+                            setRoundPrizePickerFor((cur) =>
                               cur === row.player.id ? null : row.player.id,
                             )
                           }
-                          onPick={(d) => setDrink(row.player.id, d)}
+                          onPick={(d) => setRoundPrize(row.player.id, d)}
                         />
                       </td>
                       <td className="py-4 align-top hidden md:table-cell">
@@ -1746,7 +1749,7 @@ function PasswordModal({
   );
 }
 
-function DrinkCell({
+function RoundPrizeCell({
   player,
   wins,
   openUp,
@@ -1764,14 +1767,14 @@ function DrinkCell({
   onPick: (d: string) => void;
 }) {
   const t = useT();
-  const drink = player.drink || "🥇";
+  const roundPrize = player.round_prize || "🥇";
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
 
   if (!editable) {
     return (
       <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated">
-        <span className="text-lg leading-none">{drink}</span>
+        <span className="text-lg leading-none">{roundPrize}</span>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
       </div>
     );
@@ -1802,7 +1805,7 @@ function DrinkCell({
         className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-accent transition-colors"
         title={t.board.changeRoundPrizeEmoji}
       >
-        <span className="text-lg leading-none">{drink}</span>
+        <span className="text-lg leading-none">{roundPrize}</span>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
       </button>
       {open &&
@@ -1823,7 +1826,7 @@ function DrinkCell({
                   key={d}
                   onClick={() => onPick(d)}
                   className={`size-9 grid place-items-center rounded-lg text-xl hover:bg-accent transition-colors ${
-                    d === drink ? "bg-pitch/20 ring-1 ring-pitch" : ""
+                    d === roundPrize ? "bg-pitch/20 ring-1 ring-pitch" : ""
                   }`}
                 >
                   {d}
@@ -2397,13 +2400,15 @@ function HistoryModal({
         player: asText(newV?.name ?? oldV?.name) ?? player(entry.recordId) ?? "—",
       });
     }
-    if (entry.entityType === "drink") {
+    if (entry.entityType === "drink" || entry.entityType === "round_prize") {
+      // Old audit entries were written with entityType "drink" before the rename;
+      // normalize to "round_prize" so both render through the same i18n copy.
       return t.board.historyLine({
-        entityType: "drink",
+        entityType: "round_prize",
         action: entry.action,
         player: player(entry.recordId) ?? "—",
-        from: asText(oldV?.drink),
-        to: asText(newV?.drink),
+        from: asText(oldV?.round_prize ?? oldV?.drink),
+        to: asText(newV?.round_prize ?? newV?.drink),
       });
     }
     if (entry.entityType === "league") {

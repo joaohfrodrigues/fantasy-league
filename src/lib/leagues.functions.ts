@@ -117,6 +117,13 @@ type AuditSnapshot = {
   points: number;
 };
 
+// Bypass strict Supabase schema types until migration is applied and types
+// regenerated (src/integrations/supabase/types.ts still has `drink`, not
+// `round_prize`). Shared shape for the players row so every read/write below
+// casts to one definition instead of redeclaring it per call site.
+// TODO: regenerate types after migration, then drop this and the `unknown` casts.
+export type PlayerRow = { id: string; name: string; display_order: number; round_prize: string };
+
 async function getAdmin(): Promise<AdminClient> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -530,12 +537,12 @@ export const removePlayer = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const admin = await getAdmin();
     const leagueId = await authorize(admin, data.slug, data.password);
-    const { data: existing } = await admin
+    const { data: existing } = (await admin
       .from("players")
-      .select("id, name, display_order, drink")
+      .select("id, name, display_order, round_prize")
       .eq("id", data.playerId)
       .eq("league_id", leagueId)
-      .maybeSingle();
+      .maybeSingle()) as unknown as { data: PlayerRow | null };
     const { error } = await admin
       .from("players")
       .delete()
@@ -719,41 +726,45 @@ export const deleteRound = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// --- Set drink ----------------------------------------------------------------
+// --- Set round prize -----------------------------------------------------------
 
-export const setDrink = createServerFn({ method: "POST" })
-  .inputValidator((data: { slug: string; password: string; playerId: string; drink: string }) => {
-    const drink = clean(data?.drink);
-    if (!drink || drink.length > 8) throw new Error("INVALID_DRINK");
-    return {
-      slug: clean(data?.slug),
-      password: String(data?.password ?? ""),
-      playerId: clean(data?.playerId),
-      drink,
-    };
-  })
+export const setRoundPrize = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { slug: string; password: string; playerId: string; roundPrize: string }) => {
+      const roundPrize = clean(data?.roundPrize);
+      if (!roundPrize || roundPrize.length > 8) throw new Error("INVALID_ROUND_PRIZE");
+      return {
+        slug: clean(data?.slug),
+        password: String(data?.password ?? ""),
+        playerId: clean(data?.playerId),
+        roundPrize,
+      };
+    },
+  )
   .handler(async ({ data }): Promise<{ ok: true }> => {
     const admin = await getAdmin();
     const leagueId = await authorize(admin, data.slug, data.password);
-    const { data: existing } = await admin
+    const { data: existing } = (await admin
       .from("players")
-      .select("id, drink")
+      .select("id, round_prize")
       .eq("id", data.playerId)
       .eq("league_id", leagueId)
-      .maybeSingle();
-    const { error } = await admin
+      .maybeSingle()) as unknown as { data: Pick<PlayerRow, "id" | "round_prize"> | null };
+    // `.update()`'s generated parameter type still only knows about `drink`; `never`
+    // bypasses that stale check for the one field this call actually writes.
+    const { error } = (await admin
       .from("players")
-      .update({ drink: data.drink })
+      .update({ round_prize: data.roundPrize } as never)
       .eq("id", data.playerId)
-      .eq("league_id", leagueId);
+      .eq("league_id", leagueId)) as unknown as { error: unknown };
     if (error) throw new Error("DB_ERROR");
     await writeAuditLog(admin, {
       leagueId,
-      entityType: "drink",
+      entityType: "round_prize",
       action: "UPDATE",
       recordId: data.playerId,
-      oldValues: existing ? { drink: existing.drink } : null,
-      newValues: { drink: data.drink },
+      oldValues: existing ? { round_prize: existing.round_prize } : null,
+      newValues: { round_prize: data.roundPrize },
     });
     return { ok: true };
   });
@@ -891,7 +902,7 @@ async function generateRoundSummary(
       .order("display_order"),
     admin
       .from("players")
-      .select("id, name, display_order, drink")
+      .select("id, name, display_order, round_prize")
       .eq("league_id", leagueId)
       .order("display_order"),
   ]);
@@ -910,11 +921,10 @@ async function generateRoundSummary(
     locked_at: string | null;
     display_order: number;
   };
-  type PP = { id: string; name: string; display_order: number; drink: string };
   type PS = { player_id: string; round_id: string; points: number };
 
   const roundList = rounds as PR[];
-  const playerList = players as PP[];
+  const playerList = players as unknown as PlayerRow[];
   const scoreList = (scores ?? []) as PS[];
   const targetRound = roundList.find((r) => r.id === roundId);
   if (!targetRound) return;
@@ -954,7 +964,7 @@ async function generateRoundSummary(
   const roundWinnerPlayer =
     roundMax !== undefined ? playerList.find((p) => scoreOf(p.id, roundId) === roundMax) : null;
   const roundWinner = roundWinnerPlayer?.name ?? null;
-  const roundPrize = roundWinnerPlayer?.drink ?? null;
+  const roundPrize = roundWinnerPlayer?.round_prize ?? null;
   const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
 
   // Build round history for context (all played rounds up to and including this one)
@@ -1140,7 +1150,7 @@ export const getAuditLog = createServerFn({ method: "POST" })
 // --- Export / import (JSON snapshot) ------------------------------------------
 
 export const SNAPSHOT_VERSION = 1;
-const MAX_DRINK = 8;
+const MAX_ROUND_PRIZE = 8;
 const POINTS_MIN = -10000;
 const POINTS_MAX = 100000;
 // A valid league has at most one score per (player, round) pair, so this is the
@@ -1152,7 +1162,7 @@ export type LeagueSnapshot = {
   version: number;
   exportedAt: string;
   league: { name: string };
-  players: { name: string; drink: string }[];
+  players: { name: string; round_prize: string }[];
   rounds: { name: string; short: string }[];
   scores: { player: number; round: number; points: number }[];
 };
@@ -1174,11 +1184,14 @@ export const exportLeague = createServerFn({ method: "POST" })
       .single();
     if (leagueErr || !league) throw new Error("DB_ERROR");
 
-    const { data: players, error: playersErr } = await admin
+    const { data: players, error: playersErr } = (await admin
       .from("players")
-      .select("id, name, drink, display_order")
+      .select("id, name, round_prize, display_order")
       .eq("league_id", leagueId)
-      .order("display_order", { ascending: true });
+      .order("display_order", { ascending: true })) as unknown as {
+      data: PlayerRow[] | null;
+      error: unknown;
+    };
     if (playersErr) throw new Error("DB_ERROR");
 
     const { data: rounds, error: roundsErr } = await admin
@@ -1209,7 +1222,7 @@ export const exportLeague = createServerFn({ method: "POST" })
       version: SNAPSHOT_VERSION,
       exportedAt: new Date().toISOString(),
       league: { name: league.name },
-      players: (players ?? []).map((p) => ({ name: p.name, drink: p.drink })),
+      players: (players ?? []).map((p) => ({ name: p.name, round_prize: p.round_prize })),
       rounds: (rounds ?? []).map((r) => ({ name: r.name, short: r.short })),
       scores: snapshotScores,
     };
@@ -1217,15 +1230,18 @@ export const exportLeague = createServerFn({ method: "POST" })
 
 type ParsedSnapshot = {
   name: string;
-  players: { name: string; drink: string }[];
+  players: { name: string; round_prize: string }[];
   rounds: { name: string; short: string }[];
   scores: { player: number; round: number; points: number }[];
   password: string;
 };
 
-function parsePlayers(raw: unknown[]): { name: string; drink: string }[] {
+// Snapshots exported before the drink -> round_prize rename used the `drink`
+// key; accept both so old exports keep importing without error.
+// Exported for tests: covers the drink -> round_prize backwards-compat import path.
+export function parsePlayers(raw: unknown[]): { name: string; round_prize: string }[] {
   const seen = new Set<string>();
-  const players: { name: string; drink: string }[] = [];
+  const players: { name: string; round_prize: string }[] = [];
   for (const item of raw) {
     const p = (item ?? {}) as Record<string, unknown>;
     const name = clean(p.name);
@@ -1233,9 +1249,9 @@ function parsePlayers(raw: unknown[]): { name: string; drink: string }[] {
     const key = name.toLowerCase();
     if (seen.has(key)) throw new Error("INVALID_SNAPSHOT");
     seen.add(key);
-    const drinkRaw = clean(p.drink);
-    const drink = drinkRaw.slice(0, MAX_DRINK) || "🍺";
-    players.push({ name, drink });
+    const roundPrizeRaw = clean(p.round_prize) || clean(p.drink);
+    const round_prize = roundPrizeRaw.slice(0, MAX_ROUND_PRIZE) || "🍺";
+    players.push({ name, round_prize });
   }
   if (players.length < 2 || players.length > MAX_PLAYERS) throw new Error("INVALID_SNAPSHOT");
   return players;
@@ -1364,17 +1380,22 @@ export const importLeague = createServerFn({ method: "POST" })
       throw new Error("DB_ERROR");
     }
 
-    const { data: insertedPlayers, error: playersErr } = await admin
+    // `.insert()`'s generated row type still only knows about `drink`; `never`
+    // bypasses that stale check for the one field these rows actually write.
+    const { data: insertedPlayers, error: playersErr } = (await admin
       .from("players")
       .insert(
         data.players.map((p, idx) => ({
           league_id: league.id,
           name: p.name,
-          drink: p.drink,
+          round_prize: p.round_prize,
           display_order: idx + 1,
-        })),
+        })) as never,
       )
-      .select("id, display_order");
+      .select("id, display_order")) as unknown as {
+      data: Pick<PlayerRow, "id" | "display_order">[] | null;
+      error: unknown;
+    };
     const { data: insertedRounds, error: roundsErr } = await admin
       .from("rounds")
       .insert(

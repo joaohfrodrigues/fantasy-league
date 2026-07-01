@@ -10,7 +10,7 @@ export type BanterInput = {
   leagueName: string;
   roundName: string;
   roundWinner: string | null;
-  /** Drink/prize earned by the round winner; null if no winner or no prize set. */
+  /** Round prize earned by the round winner; null if no winner or no prize set. */
   roundPrize: string | null;
   /** Full current standings after this round, sorted by rank. */
   standings: {

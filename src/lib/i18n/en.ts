@@ -235,7 +235,7 @@ export const en: Dict = {
           return `Player added: ${e.player}`;
         case "player:DELETE":
           return `Player removed: ${e.player}`;
-        case "drink:UPDATE":
+        case "round_prize:UPDATE":
           return `${e.player} prize: ${e.from ?? "—"} → ${e.to ?? "—"}`;
         case "league:UPDATE":
           return `League renamed: ${e.from ?? "—"} → ${e.to ?? "—"}`;
