@@ -177,12 +177,14 @@ export const en: Dict = {
     moreActions: "More actions",
     moreActionsLocked: "Unlock to access more actions.",
 
+    explore: "Explore",
+    exploreTitle: "What-if scenarios and alternative realities — never saved",
+
     whatIf: "What-if",
     whatIfTitle: "Explore hypothetical results without saving",
     whatIfActive: "What-if mode",
     whatIfBanner:
       "Hypothetical mode — these scores are never saved. The standings and odds below are simulated from them.",
-    whatIfExit: "Exit",
     whatIfClearAll: "Clear all",
     whatIfClearRound: "Clear round",
     whatIfPickRound: "Round",

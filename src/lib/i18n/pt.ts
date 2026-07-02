@@ -180,12 +180,14 @@ export const pt = {
     moreActions: "Mais ações",
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
+    explore: "Explorar",
+    exploreTitle: "Cenários hipotéticos e realidades alternativas — nunca guardado",
+
     whatIf: "E se",
     whatIfTitle: "Explorar resultados hipotéticos sem guardar",
     whatIfActive: "Modo e se",
     whatIfBanner:
       "Modo hipotético — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
-    whatIfExit: "Sair",
     whatIfClearAll: "Limpar tudo",
     whatIfClearRound: "Limpar ronda",
     whatIfPickRound: "Ronda",
