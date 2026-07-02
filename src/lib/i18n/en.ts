@@ -178,28 +178,28 @@ export const en: Dict = {
     moreActionsLocked: "Unlock to access more actions.",
 
     explore: "Explore",
-    exploreTitle: "What-if scenarios and alternative realities — never saved",
+    exploreTitle: "Guess the future or change the past — never saved",
 
-    whatIf: "What-if",
-    whatIfTitle: "Explore hypothetical results without saving",
-    whatIfActive: "What-if mode",
+    whatIf: "Guess the future",
+    whatIfTitle: "Project where the standings could land, without saving",
+    whatIfActive: "Guess-the-future mode",
     whatIfBanner:
-      "Hypothetical mode — these scores are never saved. The standings and odds below are simulated from them.",
+      "Guess-the-future mode — these scores are never saved. The standings and odds below are simulated from them.",
     whatIfClearAll: "Clear all",
     whatIfClearRound: "Clear round",
     whatIfPickRound: "Round",
     whatIfNoRounds:
-      "No rounds to explore yet. What-if works on rounds that haven't been played and aren't locked.",
-    whatIfRoundLabel: (name: string) => `Hypothetical scores · ${name}`,
+      "No rounds to guess yet. Guess the future works on rounds that haven't been played and aren't locked.",
+    whatIfRoundLabel: (name: string) => `Guessed scores · ${name}`,
     whatIfSliderIntro: "Drag each player's expected average for the rounds still to come.",
     whatIfSliderReset: "Reset to average",
     whatIfAdvanced: "Advanced: exact per-round scores",
 
-    altReality: "Alternative reality",
+    altReality: "Change the past",
     altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",
-    altRealityActive: "Alternative reality active",
+    altRealityActive: "Change-the-past mode",
     altRealityBanner:
-      "Alternative reality — the rounds below are excluded from totals, ranks, and odds. Nothing is saved.",
+      "Change-the-past mode — the rounds below are excluded from totals, ranks, and odds. Nothing is saved.",
     altRealityIntro: "Tap a played round to exclude it from the standings.",
     altRealityReset: "Reset",
     altRealityNoRounds: "No played rounds to exclude yet.",
