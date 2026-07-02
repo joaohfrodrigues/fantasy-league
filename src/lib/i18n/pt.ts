@@ -181,28 +181,28 @@ export const pt = {
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
     explore: "Explorar",
-    exploreTitle: "Cenários hipotéticos e realidades alternativas — nunca guardado",
+    exploreTitle: "Adivinha o futuro ou muda o passado — nunca guardado",
 
-    whatIf: "E se",
-    whatIfTitle: "Explorar resultados hipotéticos sem guardar",
-    whatIfActive: "Modo e se",
+    whatIf: "Adivinha o futuro",
+    whatIfTitle: "Projeta onde a classificação pode chegar, sem guardar",
+    whatIfActive: "Modo adivinha o futuro",
     whatIfBanner:
-      "Modo hipotético — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
+      "Modo adivinha o futuro — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
     whatIfClearAll: "Limpar tudo",
     whatIfClearRound: "Limpar ronda",
     whatIfPickRound: "Ronda",
     whatIfNoRounds:
-      "Ainda não há rondas para explorar. O modo e se aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
-    whatIfRoundLabel: (name: string) => `Pontuações hipotéticas · ${name}`,
+      "Ainda não há rondas para adivinhar. Adivinha o futuro aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
+    whatIfRoundLabel: (name: string) => `Pontuações previstas · ${name}`,
     whatIfSliderIntro: "Arrasta a média esperada de cada jogador para as rondas seguintes.",
     whatIfSliderReset: "Repor para a média",
     whatIfAdvanced: "Avançado: pontuações exatas por ronda",
 
-    altReality: "Realidade alternativa",
+    altReality: "Muda o passado",
     altRealityTitle: "Excluir rondas já jogadas da classificação para ver o quanto contaram",
-    altRealityActive: "Realidade alternativa ativa",
+    altRealityActive: "Modo muda o passado",
     altRealityBanner:
-      "Realidade alternativa — as rondas abaixo estão excluídas dos totais, classificações e probabilidades. Nada é guardado.",
+      "Modo muda o passado — as rondas abaixo estão excluídas dos totais, classificações e probabilidades. Nada é guardado.",
     altRealityIntro: "Toca numa ronda já jogada para a excluir da classificação.",
     altRealityReset: "Repor",
     altRealityNoRounds: "Ainda não há rondas jogadas para excluir.",
