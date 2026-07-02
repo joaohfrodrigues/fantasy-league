@@ -1372,8 +1372,8 @@ function LeagueBoard() {
                     exploreTab !== null
                       ? "bg-indigo-500 text-white shadow-sm hover:bg-indigo-500/90"
                       : exploreActive
-                        ? "border border-indigo-500/60 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10"
-                        : "border border-indigo-500/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                        ? "border border-indigo-500/60 text-indigo-600 dark:text-indigo-300 bg-indigo-500/20 hover:bg-indigo-500/30"
+                        : "border border-indigo-500/60 text-indigo-600 dark:text-indigo-300 bg-indigo-500/15 hover:bg-indigo-500/25"
                   }`}
                   title={t.board.exploreTitle}
                 >
@@ -1386,7 +1386,7 @@ function LeagueBoard() {
                 {players.length >= 2 && (
                   <button
                     onClick={() => setShowH2H(true)}
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-sky-500/60 text-sky-600 dark:text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 transition-colors"
                     title={t.board.h2hTitle}
                   >
                     <Swords className="size-3.5" />
