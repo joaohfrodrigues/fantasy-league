@@ -177,18 +177,32 @@ export const en: Dict = {
     moreActions: "More actions",
     moreActionsLocked: "Unlock to access more actions.",
 
+    explore: "Explore",
+    exploreTitle: "What-if scenarios and alternative realities — never saved",
+
     whatIf: "What-if",
     whatIfTitle: "Explore hypothetical results without saving",
     whatIfActive: "What-if mode",
     whatIfBanner:
       "Hypothetical mode — these scores are never saved. The standings and odds below are simulated from them.",
-    whatIfExit: "Exit",
     whatIfClearAll: "Clear all",
     whatIfClearRound: "Clear round",
     whatIfPickRound: "Round",
     whatIfNoRounds:
       "No rounds to explore yet. What-if works on rounds that haven't been played and aren't locked.",
     whatIfRoundLabel: (name: string) => `Hypothetical scores · ${name}`,
+    whatIfSliderIntro: "Drag each player's expected average for the rounds still to come.",
+    whatIfSliderReset: "Reset to average",
+    whatIfAdvanced: "Advanced: exact per-round scores",
+
+    altReality: "Alternative reality",
+    altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",
+    altRealityActive: "Alternative reality active",
+    altRealityBanner:
+      "Alternative reality — the rounds below are excluded from totals, ranks, and odds. Nothing is saved.",
+    altRealityIntro: "Tap a played round to exclude it from the standings.",
+    altRealityReset: "Reset",
+    altRealityNoRounds: "No played rounds to exclude yet.",
 
     tiebreak: "Tie-break",
     tiebreakTitle: "How players level on total points are ranked",

@@ -119,6 +119,51 @@ describe("computeRoundMaxes", () => {
   });
 });
 
+describe("computeStandings — Alternative Reality (excluded rounds)", () => {
+  // p1 wins r1 big, p2 wins r2+r3 by a little each — over all 3 rounds p1 leads
+  // on total. Excluding r1 (the "what if that round never happened" scenario)
+  // should flip the total lead and the rank, since callers exclude a round by
+  // passing a filtered rounds array straight through — no module change needed.
+  const score = lookup({
+    "p1:r1": 100,
+    "p1:r2": 10,
+    "p1:r3": 10,
+    "p2:r1": 0,
+    "p2:r2": 30,
+    "p2:r3": 30,
+  });
+  const bothPlayers = [player("p1"), player("p2")];
+
+  it("includes every round by default", () => {
+    const rows = computeStandings({
+      players: bothPlayers,
+      rounds,
+      score,
+      winProbability: noProb,
+      tiebreak: "total",
+    });
+    expect(rows.find((r) => r.player.id === "p1")!.agg).toBe(120);
+    expect(rows.find((r) => r.player.id === "p1")!.rank).toBe(1);
+  });
+
+  it("recomputes totals and rank from a filtered round set that excludes a played round", () => {
+    const withoutR1 = rounds.filter((r) => r.id !== "r1");
+    const rows = computeStandings({
+      players: bothPlayers,
+      rounds: withoutR1,
+      score,
+      winProbability: noProb,
+      tiebreak: "total",
+    });
+    const p1 = rows.find((r) => r.player.id === "p1")!;
+    const p2 = rows.find((r) => r.player.id === "p2")!;
+    expect(p1.agg).toBe(20);
+    expect(p2.agg).toBe(60);
+    expect(p2.rank).toBe(1);
+    expect(p1.rank).toBe(2);
+  });
+});
+
 describe("compareRank", () => {
   it("orders by total first", () => {
     expect(

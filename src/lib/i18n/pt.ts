@@ -180,18 +180,32 @@ export const pt = {
     moreActions: "Mais ações",
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
+    explore: "Explorar",
+    exploreTitle: "Cenários hipotéticos e realidades alternativas — nunca guardado",
+
     whatIf: "E se",
     whatIfTitle: "Explorar resultados hipotéticos sem guardar",
     whatIfActive: "Modo e se",
     whatIfBanner:
       "Modo hipotético — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
-    whatIfExit: "Sair",
     whatIfClearAll: "Limpar tudo",
     whatIfClearRound: "Limpar ronda",
     whatIfPickRound: "Ronda",
     whatIfNoRounds:
       "Ainda não há rondas para explorar. O modo e se aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
     whatIfRoundLabel: (name: string) => `Pontuações hipotéticas · ${name}`,
+    whatIfSliderIntro: "Arrasta a média esperada de cada jogador para as rondas seguintes.",
+    whatIfSliderReset: "Repor para a média",
+    whatIfAdvanced: "Avançado: pontuações exatas por ronda",
+
+    altReality: "Realidade alternativa",
+    altRealityTitle: "Excluir rondas já jogadas da classificação para ver o quanto contaram",
+    altRealityActive: "Realidade alternativa ativa",
+    altRealityBanner:
+      "Realidade alternativa — as rondas abaixo estão excluídas dos totais, classificações e probabilidades. Nada é guardado.",
+    altRealityIntro: "Toca numa ronda já jogada para a excluir da classificação.",
+    altRealityReset: "Repor",
+    altRealityNoRounds: "Ainda não há rondas jogadas para excluir.",
 
     tiebreak: "Desempate",
     tiebreakTitle: "Como são ordenados os jogadores com os mesmos pontos",
