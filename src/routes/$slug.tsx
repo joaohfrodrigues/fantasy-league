@@ -1098,8 +1098,8 @@ function LeagueBoard() {
                 <span
                   className={`grid place-items-center size-9 rounded-xl shrink-0 ${
                     exploreTab === "whatif"
-                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                      : "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                      ? "bg-amber-500/15 text-amber-400"
+                      : "bg-violet-500/15 text-violet-400"
                   }`}
                 >
                   {exploreTab === "whatif" ? (
@@ -1140,8 +1140,8 @@ function LeagueBoard() {
                   aria-label={t.common.close}
                   className={`inline-flex items-center justify-center size-8 rounded-md transition-colors ${
                     exploreTab === "whatif"
-                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-                      : "bg-violet-500/15 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25"
+                      ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
+                      : "bg-violet-500/15 text-violet-400 hover:bg-violet-500/25"
                   }`}
                 >
                   <X className="size-3.5" />
@@ -1197,7 +1197,7 @@ function LeagueBoard() {
                                 {p.name}
                               </span>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-mono tabular-nums text-sm text-amber-600 dark:text-amber-400">
+                                <span className="font-mono tabular-nums text-sm text-amber-400">
                                   {Math.round(mean)}
                                 </span>
                                 {touched && (
@@ -1248,7 +1248,7 @@ function LeagueBoard() {
                               onClick={() => setWhatIfRoundId(r.id)}
                               className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
                                 active
-                                  ? "bg-amber-500/25 text-amber-700 dark:text-amber-300"
+                                  ? "bg-amber-500/25 text-amber-300"
                                   : "bg-surface-elevated text-muted-foreground hover:text-foreground"
                               }`}
                               title={r.name}
@@ -1337,7 +1337,7 @@ function LeagueBoard() {
                           onClick={() => toggleAltRealityRound(r.id)}
                           className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
                             excluded
-                              ? "bg-violet-500/25 text-violet-700 dark:text-violet-300 line-through"
+                              ? "bg-violet-500/25 text-violet-300 line-through"
                               : "bg-surface-elevated text-muted-foreground hover:text-foreground"
                           }`}
                           title={r.name}
@@ -1498,7 +1498,7 @@ function LeagueBoard() {
                       locked
                         ? "bg-pitch/15 text-pitch"
                         : played
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          ? "bg-amber-500/15 text-amber-400"
                           : "bg-surface-elevated text-muted-foreground"
                     }`}
                   >
@@ -1724,7 +1724,7 @@ function LeagueBoard() {
                             ) : isExcluded ? (
                               <span className="line-through">{v}</span>
                             ) : isWhatIf ? (
-                              <span className="text-amber-600 dark:text-amber-400 italic">{v}</span>
+                              <span className="text-amber-400 italic">{v}</span>
                             ) : isRoundWin && roundLocked ? (
                               // Banked round win (round is final).
                               <span className="text-pitch font-bold">{v}</span>
