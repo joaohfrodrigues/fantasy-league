@@ -189,6 +189,18 @@ export const en: Dict = {
     whatIfNoRounds:
       "No rounds to explore yet. What-if works on rounds that haven't been played and aren't locked.",
     whatIfRoundLabel: (name: string) => `Hypothetical scores · ${name}`,
+    whatIfSliderIntro: "Drag each player's expected average for the rounds still to come.",
+    whatIfSliderReset: "Reset to average",
+    whatIfAdvanced: "Advanced: exact per-round scores",
+
+    altReality: "Alternative reality",
+    altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",
+    altRealityActive: "Alternative reality active",
+    altRealityBanner:
+      "Alternative reality — the rounds below are excluded from totals, ranks, and odds. Nothing is saved.",
+    altRealityIntro: "Tap a played round to exclude it from the standings.",
+    altRealityReset: "Reset",
+    altRealityNoRounds: "No played rounds to exclude yet.",
 
     tiebreak: "Tie-break",
     tiebreakTitle: "How players level on total points are ranked",
