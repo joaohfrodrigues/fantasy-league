@@ -897,7 +897,7 @@ async function generateRoundSummary(
     admin.from("leagues").select("id, name, tiebreak").eq("id", leagueId).maybeSingle(),
     admin
       .from("rounds")
-      .select("id, name, short, locked_at, display_order")
+      .select("id, name, short, locked_at, display_order, summary_en, banter_devices")
       .eq("league_id", leagueId)
       .order("display_order"),
     admin
@@ -908,22 +908,23 @@ async function generateRoundSummary(
   ]);
   if (!lg || !rounds?.length || !players?.length) return;
 
-  const roundIds = rounds.map((r: { id: string }) => r.id);
-  const { data: scores } = await admin
-    .from("scores")
-    .select("player_id, round_id, points")
-    .in("round_id", roundIds);
-
   type PR = {
     id: string;
     name: string;
     short: string;
     locked_at: string | null;
     display_order: number;
+    summary_en: string | null;
+    banter_devices: string[] | null;
   };
   type PS = { player_id: string; round_id: string; points: number };
 
-  const roundList = rounds as PR[];
+  const roundList = rounds as unknown as PR[];
+  const roundIds = roundList.map((r) => r.id);
+  const { data: scores } = await admin
+    .from("scores")
+    .select("player_id, round_id, points")
+    .in("round_id", roundIds);
   const playerList = players as unknown as PlayerRow[];
   const scoreList = (scores ?? []) as PS[];
   const targetRound = roundList.find((r) => r.id === roundId);
@@ -980,6 +981,16 @@ async function generateRoundSummary(
 
   const upcomingRounds = roundList.filter((r) => !roundMaxes.has(r.id)).map((r) => r.name);
 
+  // Prior generated banter, for steering the AI away from repeating recent jokes/themes.
+  const priorPlayedRounds = playedRounds.filter((r) => r.id !== roundId);
+  const priorSummaries = priorPlayedRounds
+    .slice(-3)
+    .map((r) => r.summary_en)
+    .filter((s): s is string => !!s);
+  const priorDevices = [
+    ...new Set(priorPlayedRounds.slice(-10).flatMap((r) => r.banter_devices ?? [])),
+  ];
+
   // Detect leader change: compare pre-round leader (by total excluding this round) vs post-round
   const preRoundLeader = [...standingRows].sort(
     (a, b) =>
@@ -1011,24 +1022,31 @@ async function generateRoundSummary(
     roundsPlayed,
     totalRounds: roundList.length,
     leaderChanged,
+    priorSummaries,
+    priorDevices,
   };
 
-  const { en, pt, ai } = await getBanter(input).catch(() => ({
+  const { en, pt, ai, devices } = await getBanter(input).catch(() => ({
     en: templatedBanter(input, "en"),
     pt: templatedBanter(input, "pt"),
     ai: false,
+    devices: [] as string[],
   }));
   console.log(
     `[banter] round "${targetRound.name}" (league ${lg.name}): ${ai ? "AI (Gemini)" : "templated fallback"}`,
   );
   // Bypass strict Supabase schema types until migration is applied and types regenerated.
   type RoundsSummaryUpdate = {
-    update(d: { summary_en: string | null; summary_pt: string | null }): {
+    update(d: {
+      summary_en: string | null;
+      summary_pt: string | null;
+      banter_devices: string[] | null;
+    }): {
       eq(col: string, val: string): Promise<unknown>;
     };
   };
   await (admin.from("rounds") as unknown as RoundsSummaryUpdate)
-    .update({ summary_en: en, summary_pt: pt })
+    .update({ summary_en: en, summary_pt: pt, banter_devices: devices.length ? devices : null })
     .eq("id", roundId);
 }
 
