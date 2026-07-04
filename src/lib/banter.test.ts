@@ -24,6 +24,8 @@ const base: BanterInput = {
   roundsPlayed: 3,
   totalRounds: 6,
   leaderChanged: false,
+  priorSummaries: [],
+  priorDevices: [],
 };
 
 afterEach(() => {
@@ -150,6 +152,36 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(base);
     expect(prompt).not.toContain("League leader changed");
   });
+
+  it("includes prior round summaries when present", () => {
+    const prompt = buildPrompt({
+      ...base,
+      priorSummaries: ["Alice cruises to victory again.", "Bob's collapse continues."],
+    });
+    expect(prompt).toContain("Alice cruises to victory again.");
+    expect(prompt).toContain("Bob's collapse continues.");
+    expect(prompt).toContain("Previous banter");
+  });
+
+  it("omits prior summaries section when none are given", () => {
+    const prompt = buildPrompt(base);
+    expect(prompt).not.toContain("Previous banter");
+  });
+
+  it("includes prior narrative devices when present", () => {
+    const prompt = buildPrompt({
+      ...base,
+      priorDevices: ["leader-change-callout", "last-place-roast"],
+    });
+    expect(prompt).toContain("leader-change-callout");
+    expect(prompt).toContain("last-place-roast");
+    expect(prompt).toContain("already used");
+  });
+
+  it("omits devices section when none are given", () => {
+    const prompt = buildPrompt(base);
+    expect(prompt).not.toContain("already used");
+  });
 });
 
 describe("getBanter", () => {
@@ -183,6 +215,36 @@ describe("getBanter", () => {
     expect(result.ai).toBe(true);
     expect(result.en).toBe("Great round!");
     expect(result.pt).toBe("Que ronda!");
+  });
+
+  it("returns devices reported by Gemini, defaulting to [] when absent", async () => {
+    vi.stubEnv("GOOGLE_AI_API_KEY", "test-key");
+    const mockResponse = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  en: "Great round!",
+                  pt: "Que ronda!",
+                  devices: ["leader-change-callout", "last-place-roast"],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => mockResponse }));
+    const result = await getBanter(base);
+    expect(result.devices).toEqual(["leader-change-callout", "last-place-roast"]);
+  });
+
+  it("returns devices: [] for the templated fallback", async () => {
+    vi.stubEnv("GOOGLE_AI_API_KEY", "");
+    const result = await getBanter(base);
+    expect(result.devices).toEqual([]);
   });
 
   it("falls back to templated when Gemini returns a non-ok response", async () => {
@@ -263,5 +325,47 @@ describe("getBanter", () => {
     expect(prompt).toContain("round prize: 🍺");
     expect(prompt).toContain("Next rounds: Quarter Final, Semi Final, Final");
     expect(prompt).toContain("Alice: onFire");
+  });
+
+  it("requests a devices field in the response schema", async () => {
+    vi.stubEnv("GOOGLE_AI_API_KEY", "test-key");
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ en: "x", pt: "y" }) }] } }],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await getBanter(base);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string) as {
+      generationConfig: { responseSchema: { properties: Record<string, unknown> } };
+    };
+    expect(body.generationConfig.responseSchema.properties).toHaveProperty("devices");
+  });
+
+  it("includes prior summaries and devices in the Gemini prompt when present", async () => {
+    vi.stubEnv("GOOGLE_AI_API_KEY", "test-key");
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ en: "x", pt: "y" }) }] } }],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await getBanter({
+      ...base,
+      priorSummaries: ["Alice cruises to victory again."],
+      priorDevices: ["leader-change-callout"],
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string) as {
+      contents: { parts: { text: string }[] }[];
+    };
+    const prompt = body.contents[0].parts[0].text;
+    expect(prompt).toContain("Alice cruises to victory again.");
+    expect(prompt).toContain("leader-change-callout");
   });
 });

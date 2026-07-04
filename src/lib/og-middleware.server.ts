@@ -217,6 +217,8 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
           roundsPlayed,
           totalRounds: roundList.length,
           leaderChanged,
+          priorSummaries: [],
+          priorDevices: [],
         },
         "en",
       );

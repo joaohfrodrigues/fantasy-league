@@ -32,6 +32,10 @@ export type BanterInput = {
   totalRounds: number;
   /** True when the overall league leader changed as a result of this round. */
   leaderChanged: boolean;
+  /** English text of recent prior generated summaries, oldest first — steers phrasing/tone variety. */
+  priorSummaries: string[];
+  /** Narrative devices (short tags) self-reported by prior AI generations — steers structural variety. */
+  priorDevices: string[];
 };
 
 export type BanterLocale = "en" | "pt";
@@ -101,7 +105,9 @@ export function templatedBanter(input: BanterInput, locale: BanterLocale): strin
   return parts.slice(0, 3).join(" ") || tpl.fallback(roundName);
 }
 
-async function callGemini(prompt: string): Promise<{ en: string; pt: string } | null> {
+async function callGemini(
+  prompt: string,
+): Promise<{ en: string; pt: string; devices: string[] } | null> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
     console.warn("[banter] GOOGLE_AI_API_KEY not set — using templated fallback");
@@ -126,7 +132,9 @@ async function callGemini(prompt: string): Promise<{ en: string; pt: string } | 
               "- If upcoming rounds are listed, reference the next one to frame what's at stake.",
               "- If badges are listed (onFire, onRise, bottler, ghost), weave them in naturally.",
               "- Maximum 3 sentences. No hashtags, no emojis, no filler like 'Alright folks' or 'Well well well'. Just the pundit take.",
-              "Output JSON with two fields: 'en' (British English) and 'pt' (European Portuguese, pt-PT — informal, expressive, idiomatically natural; not Brazilian Portuguese, not a literal translation of the English).",
+              "- You may be shown up to 3 previous round summaries and a list of narrative devices already used recently.",
+              "  Pick a different angle, joke, and phrasing this round — do not reuse them. Never mention that you're avoiding repetition or refer to previous rounds' commentary.",
+              "Output JSON with three fields: 'en' (British English), 'pt' (European Portuguese, pt-PT — informal, expressive, idiomatically natural; not Brazilian Portuguese, not a literal translation of the English), and 'devices' — a short array (1-4 items) of kebab-case tags naming the narrative angles you used this round (e.g. 'leader-change-callout', 'last-place-roast', 'prize-mention', 'win-probability-comparison', 'badge-callout', 'next-round-teaser').",
             ].join(" "),
           },
         ],
@@ -137,8 +145,12 @@ async function callGemini(prompt: string): Promise<{ en: string; pt: string } | 
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
-          properties: { en: { type: "STRING" }, pt: { type: "STRING" } },
-          required: ["en", "pt"],
+          properties: {
+            en: { type: "STRING" },
+            pt: { type: "STRING" },
+            devices: { type: "ARRAY", items: { type: "STRING" } },
+          },
+          required: ["en", "pt", "devices"],
         },
       },
     };
@@ -159,14 +171,17 @@ async function callGemini(prompt: string): Promise<{ en: string; pt: string } | 
       console.warn("[banter] Gemini returned no text — using templated fallback");
       return null;
     }
-    const parsed = JSON.parse(raw) as { en?: string; pt?: string };
+    const parsed = JSON.parse(raw) as { en?: string; pt?: string; devices?: string[] };
     const en = parsed.en?.trim();
     const pt = parsed.pt?.trim();
     if (!en || !pt) {
       console.warn("[banter] Gemini response missing en/pt — using templated fallback");
       return null;
     }
-    return { en, pt };
+    const devices = Array.isArray(parsed.devices)
+      ? parsed.devices.filter((d): d is string => typeof d === "string" && d.length > 0)
+      : [];
+    return { en, pt, devices };
   } catch (err) {
     console.error("[banter] Gemini call threw:", err);
     return null;
@@ -186,6 +201,8 @@ export function buildPrompt(input: BanterInput): string {
     roundsPlayed,
     totalRounds,
     leaderChanged,
+    priorSummaries,
+    priorDevices,
   } = input;
   const remaining = totalRounds - roundsPlayed;
 
@@ -238,6 +255,12 @@ export function buildPrompt(input: BanterInput): string {
     upcomingNote,
     historyLines ? `Previous round winners: ${historyLines}.` : null,
     badgeLines ? `Badges earned: ${badgeLines}.` : null,
+    priorSummaries.length > 0
+      ? `Previous banter (avoid repeating these jokes/phrasing): ${priorSummaries.map((s, i) => `${i + 1}) ${s}`).join(" ")}`
+      : null,
+    priorDevices.length > 0
+      ? `Narrative angles already used recently — pick a different one this round: ${priorDevices.join(", ")}.`
+      : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -246,12 +269,13 @@ export function buildPrompt(input: BanterInput): string {
 /** Generate banter for a round in both locales. AI when available, templated otherwise. */
 export async function getBanter(
   input: BanterInput,
-): Promise<{ en: string; pt: string; ai: boolean }> {
+): Promise<{ en: string; pt: string; ai: boolean; devices: string[] }> {
   const ai = await callGemini(buildPrompt(input));
-  if (ai) return { en: ai.en, pt: ai.pt, ai: true };
+  if (ai) return { en: ai.en, pt: ai.pt, ai: true, devices: ai.devices };
   return {
     en: templatedBanter(input, "en"),
     pt: templatedBanter(input, "pt"),
     ai: false,
+    devices: [],
   };
 }
