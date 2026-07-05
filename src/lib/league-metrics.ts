@@ -3,7 +3,7 @@
 // for "this league's live metrics" once instead of re-deriving round maxes, then
 // win probability, then tiebreak-aware rank at every call site. Record metrics
 // (Badge, Round prize tallies) are a separate concept — see computeRecordMetrics
-// in ./badges, since they never respond to What-if / Alternative Reality.
+// in ./badges, since they never respond to Alternative Reality.
 import {
   computeStandings,
   computeRoundMaxes,
@@ -18,14 +18,12 @@ export function computeLiveMetrics<P extends { id: string }>(params: {
   rounds: { id: string; locked?: boolean; short?: string }[];
   score: ScoreLookup;
   tiebreak: TiebreakMode;
-  /** What-if slider override; see simulateWinProbability. */
-  whatIfMean?: Map<string, number>;
   /** Antithetic pairs for the simulation; see simulateWinProbability. */
   pairs?: number;
 }): { standings: StandingRow<P>[]; winProbability: Map<string, number> } {
-  const { players, rounds, score, tiebreak, whatIfMean, pairs } = params;
+  const { players, rounds, score, tiebreak, pairs } = params;
   const roundMaxes = computeRoundMaxes(players, rounds, score);
-  const winProbability = simulateWinProbability({ players, rounds, score, whatIfMean, pairs });
+  const winProbability = simulateWinProbability({ players, rounds, score, pairs });
   const standings = computeStandings({
     players,
     rounds,

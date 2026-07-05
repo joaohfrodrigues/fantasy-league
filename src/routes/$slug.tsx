@@ -23,14 +23,13 @@ import {
   Gauge,
   History,
   Download,
-  FlaskConical,
   Scale,
   Menu,
   Share2,
   UserCheck,
   Sparkles,
   Shuffle,
-  Wand2,
+  Target,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -54,13 +53,13 @@ import {
 import { useT, useLocale, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
-import { toSimRound, playerAverage, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
-import { Slider } from "@/components/ui/slider";
-import { computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
+import { toSimRound, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
+import { computeRoundMaxes, TIEBREAKS, type TiebreakMode, type StandingRow } from "@/lib/standings";
 import { computeH2H } from "@/lib/h2h";
 import { computeLiveMetrics } from "@/lib/league-metrics";
 import { computeRecordMetrics } from "@/lib/badges";
-import { resolveWhatIf, resolveAlternativeReality } from "@/lib/what-if";
+import { computePathToVictory } from "@/lib/path-to-victory";
+import { resolveAlternativeReality } from "@/lib/alt-reality";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -168,27 +167,10 @@ function LeagueBoard() {
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
-  // Explore panel: a single entry point for the two hypothetical-scenario
-  // tools below, shown as tabs so they read as one feature rather than two
-  // separate toggles. `exploreTab` only controls which tab's UI is visible —
-  // What-if and Alternative Reality can be active simultaneously (a future
-  // slider and an excluded past round both affect the simulation at once),
-  // so switching tabs never clears the other tab's state.
-  const [exploreTab, setExploreTab] = useState<"whatif" | "altreality" | null>(null);
-
-  // What-if mode: layer hypothetical scores over future rounds to preview the
-  // standings and winning odds. Purely client-side — never persisted. Primary
-  // control is a per-player expected-average slider (whatIfMean); "Advanced"
-  // reveals the exact per-round score grid (whatIf) on top of it.
-  const [whatIf, setWhatIf] = useState<Map<string, number>>(new Map());
-  const [whatIfMean, setWhatIfMean] = useState<Map<string, number>>(new Map());
-  const [whatIfAdvancedOn, setWhatIfAdvancedOn] = useState(false);
-  const [whatIfRoundId, setWhatIfRoundId] = useState<string | null>(null);
-
-  // Alternative Reality: exclude one or more played (locked) rounds from the
-  // standings/odds computation to see how much they mattered. Purely
-  // client-side — never persisted. Distinct from What-if, which only touches
-  // unplayed future rounds.
+  // Alternative Reality panel: exclude one or more played (locked) rounds from
+  // the standings/odds computation to see how much they mattered. Purely
+  // client-side — never persisted.
+  const [altRealityOpen, setAltRealityOpen] = useState(false);
   const [altRealityExcluded, setAltRealityExcluded] = useState<Set<string>>(new Set());
 
   // Column the standings table is sorted by. "total" | "prizes" | "dinner" | <roundId>.
@@ -333,74 +315,7 @@ function LeagueBoard() {
     return () => clearTimeout(id);
   }, [scoreMap]);
 
-  // Rounds that already have at least one saved score. What-if only applies to
-  // rounds that haven't been played yet and aren't locked.
-  const savedPlayedRoundIds = useMemo(() => {
-    const s = new Set<string>();
-    rounds.forEach((r) => {
-      if (players.some((p) => scoreMap.has(`${p.id}:${r.id}`))) s.add(r.id);
-    });
-    return s;
-  }, [scoreMap, players, rounds]);
-
-  const whatIfRounds = useMemo(
-    () => rounds.filter((r) => !savedPlayedRoundIds.has(r.id) && r.locked_at === null),
-    [rounds, savedPlayedRoundIds],
-  );
-  const selectedWhatIfRound = useMemo(
-    () => whatIfRounds.find((r) => r.id === whatIfRoundId) ?? whatIfRounds[0] ?? null,
-    [whatIfRounds, whatIfRoundId],
-  );
-
-  // Saved scores with hypothetical what-if values layered on top (when any
-  // exact per-round overrides exist — independent of which Explore tab is
-  // currently visible, so switching tabs never discards this).
-  const effectiveScoreMap = useMemo(
-    () => resolveWhatIf({ scoreMap, cellOverrides: whatIf }).effectiveScoreMap,
-    [scoreMap, whatIf],
-  );
-
-  // Debounced copy that feeds the heavy Monte Carlo + standings so typing
-  // hypothetical scores doesn't re-run the simulation on every keystroke.
-  // Only debounced while there are overrides to type around; plain score
-  // edits (the admin flow) stay instant.
-  const [simMap, setSimMap] = useState<Map<string, number>>(scoreMap);
-  useEffect(() => {
-    if (whatIf.size === 0) {
-      setSimMap(effectiveScoreMap);
-      return;
-    }
-    const id = setTimeout(() => setSimMap(effectiveScoreMap), 250);
-    return () => clearTimeout(id);
-  }, [effectiveScoreMap, whatIf]);
-
-  // Each player's current per-round average from saved scores — the What-if
-  // slider's default position (see src/lib/simulation.ts: playerAverage).
-  const playerDefaultMean = useMemo(() => {
-    const m = new Map<string, number>();
-    players.forEach((p) => {
-      const vals = rounds
-        .map((r) => scoreMap.get(`${p.id}:${r.id}`))
-        .filter((v): v is number => typeof v === "number");
-      m.set(p.id, playerAverage(vals) ?? 70);
-    });
-    return m;
-  }, [players, rounds, scoreMap]);
-
-  // Debounced copy of the slider means so dragging doesn't re-run the Monte
-  // Carlo on every pointer-move frame.
-  const [simWhatIfMean, setSimWhatIfMean] = useState<Map<string, number>>(new Map());
-  useEffect(() => {
-    const id = setTimeout(() => setSimWhatIfMean(whatIfMean), 250);
-    return () => clearTimeout(id);
-  }, [whatIfMean]);
-
   const altRealityOn = altRealityExcluded.size > 0;
-
-  // Whether either Explore tool has an active hypothetical applied — drives
-  // the Explore trigger button's highlighted state even while the panel
-  // itself is closed.
-  const exploreActive = whatIf.size > 0 || whatIfMean.size > 0 || altRealityOn;
 
   // Rounds after Alternative Reality exclusion — feeds the simulation and
   // standings only; the table still renders every round column from `rounds`.
@@ -410,10 +325,12 @@ function LeagueBoard() {
   );
 
   const roundsPlayedIds = useMemo(
-    () => rounds.filter((r) => players.some((p) => simMap.has(`${p.id}:${r.id}`))).map((r) => r.id),
-    [simMap, players, rounds],
+    () =>
+      rounds.filter((r) => players.some((p) => scoreMap.has(`${p.id}:${r.id}`))).map((r) => r.id),
+    [scoreMap, players, rounds],
   );
   const roundsRemaining = rounds.length - roundsPlayedIds.length;
+  const hasLockedRounds = useMemo(() => rounds.some((r) => r.locked_at !== null), [rounds]);
 
   const roundIndexById = useMemo(() => {
     const m = new Map<string, number>();
@@ -422,8 +339,8 @@ function LeagueBoard() {
   }, [rounds]);
 
   const scoreOf = useCallback(
-    (playerId: string, roundId: string) => simMap.get(`${playerId}:${roundId}`),
-    [simMap],
+    (playerId: string, roundId: string) => scoreMap.get(`${playerId}:${roundId}`),
+    [scoreMap],
   );
 
   const roundMaxById = useMemo(
@@ -442,7 +359,7 @@ function LeagueBoard() {
   // Live metrics (see src/lib/league-metrics.ts): win probability + standings
   // together, one seam shared with round-lock banter generation and the OG
   // image. Live: total + tiebreak use Alternative Reality's round set when
-  // active; win probability reacts to What-if's slider mean too.
+  // active.
   const { standings: baseStandings, winProbability: dinnerProb } = useMemo(
     () =>
       computeLiveMetrics({
@@ -450,9 +367,8 @@ function LeagueBoard() {
         rounds: simRoundsWithLock,
         score: scoreOf,
         tiebreak,
-        whatIfMean: simWhatIfMean.size > 0 ? simWhatIfMean : undefined,
       }),
-    [players, simRoundsWithLock, scoreOf, tiebreak, simWhatIfMean],
+    [players, simRoundsWithLock, scoreOf, tiebreak],
   );
 
   // Record metrics (see src/lib/badges.ts): Badges and the Round-prize win
@@ -529,7 +445,7 @@ function LeagueBoard() {
     rounds.forEach((r) => {
       const entries: { name: string; v: number }[] = [];
       players.forEach((p) => {
-        const v = simMap.get(`${p.id}:${r.id}`);
+        const v = scoreMap.get(`${p.id}:${r.id}`);
         if (typeof v !== "number") return;
         entries.push({ name: p.name, v });
         sum += v;
@@ -547,7 +463,7 @@ function LeagueBoard() {
     });
     const avg = count ? sum / count : 0;
     const totals = [...players]
-      .map((p) => rounds.reduce((a, r) => a + (simMap.get(`${p.id}:${r.id}`) ?? 0), 0))
+      .map((p) => rounds.reduce((a, r) => a + (scoreMap.get(`${p.id}:${r.id}`) ?? 0), 0))
       .sort((a, b) => b - a);
     const lead = totals.length >= 2 ? totals[0] - totals[1] : null;
     return { high, low, margin, avg, count, lead } as {
@@ -558,7 +474,7 @@ function LeagueBoard() {
       count: number;
       lead: number | null;
     };
-  }, [rounds, players, simMap]);
+  }, [rounds, players, scoreMap]);
 
   async function addPlayers() {
     const names = playerDraft.map((n) => n.trim()).filter(Boolean);
@@ -735,34 +651,6 @@ function LeagueBoard() {
     }
   }
 
-  // Single entry point for the Explore panel: opens on the last-viewed tab
-  // (defaulting to What-if) or closes it if already open. What-if and
-  // Alternative Reality state persist across tab switches and panel close —
-  // this only controls which tab is visible.
-  function toggleExplore() {
-    setExploreTab((cur) => {
-      if (cur !== null) return null;
-      setWhatIfRoundId((r) => r ?? whatIfRounds[0]?.id ?? null);
-      return "whatif";
-    });
-  }
-
-  function closeExplore() {
-    setExploreTab(null);
-  }
-
-  function setWhatIfPlayerMean(playerId: string, mean: number) {
-    setWhatIfMean((prev) => new Map(prev).set(playerId, mean));
-  }
-
-  function resetWhatIfPlayerMean(playerId: string) {
-    setWhatIfMean((prev) => {
-      const m = new Map(prev);
-      m.delete(playerId);
-      return m;
-    });
-  }
-
   function toggleAltRealityRound(roundId: string) {
     setAltRealityExcluded((prev) => {
       const s = new Set(prev);
@@ -774,30 +662,6 @@ function LeagueBoard() {
 
   function resetAltReality() {
     setAltRealityExcluded(new Set());
-  }
-
-  function setWhatIfScore(playerId: string, roundId: string, value: string) {
-    const key = `${playerId}:${roundId}`;
-    const n = parseDraftPoints(value);
-    setWhatIf((prev) => {
-      const m = new Map(prev);
-      if (n === null) m.delete(key);
-      else m.set(key, n);
-      return m;
-    });
-  }
-
-  function clearWhatIfRound(roundId: string) {
-    setWhatIf((prev) => {
-      const m = new Map(prev);
-      for (const k of [...m.keys()]) if (k.endsWith(`:${roundId}`)) m.delete(k);
-      return m;
-    });
-  }
-
-  function clearWhatIfAll() {
-    setWhatIf(new Map());
-    setWhatIfMean(new Map());
   }
 
   if (loading) {
@@ -960,15 +824,12 @@ function LeagueBoard() {
           const v = scoreOf(row.player.id, rid) ?? null;
           const roundMax = roundMaxById.get(rid);
           const isRoundWin = v !== null && roundMax !== undefined && v === roundMax;
-          const isWhatIf = whatIf.has(`${row.player.id}:${rid}`);
           const isExcluded = altRealityOn && altRealityExcluded.has(rid);
           const content =
             v === null ? (
               <span className="text-muted-foreground/30">—</span>
             ) : isExcluded ? (
               <span className="line-through">{v}</span>
-            ) : isWhatIf ? (
-              <span className="text-amber-400 italic">{v}</span>
             ) : isRoundWin && roundLocked ? (
               // Banked round win (round is final).
               <span className="text-pitch font-bold">{v}</span>
@@ -1213,50 +1074,24 @@ function LeagueBoard() {
         )}
       </section>
 
-      {/* Explore panel: What-if + Alternative Reality, as tabs of one feature */}
-      {exploreTab !== null && (
+      {/* Alternative Reality panel: "change the past" — exclude played rounds. */}
+      {altRealityOpen && (
         <section className="max-w-6xl mx-auto px-6 pb-2">
-          <div
-            className={`rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 ${
-              exploreTab === "whatif"
-                ? "border-amber-500/40 bg-amber-500/5"
-                : "border-violet-500/40 bg-violet-500/5"
-            }`}
-          >
+          <div className="rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 border-violet-500/40 bg-violet-500/5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-3">
-                <span
-                  className={`grid place-items-center size-9 rounded-xl shrink-0 ${
-                    exploreTab === "whatif"
-                      ? "bg-amber-500/15 text-amber-400"
-                      : "bg-violet-500/15 text-violet-400"
-                  }`}
-                >
-                  {exploreTab === "whatif" ? (
-                    <FlaskConical className="size-4" />
-                  ) : (
-                    <Shuffle className="size-4" />
-                  )}
+                <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-violet-500/15 text-violet-400">
+                  <Shuffle className="size-4" />
                 </span>
                 <div>
-                  <h2 className="font-display text-lg font-semibold">
-                    {exploreTab === "whatif" ? t.board.whatIfActive : t.board.altRealityActive}
-                  </h2>
+                  <h2 className="font-display text-lg font-semibold">{t.board.altRealityActive}</h2>
                   <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
-                    {exploreTab === "whatif" ? t.board.whatIfBanner : t.board.altRealityBanner}
+                    {t.board.altRealityBanner}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {exploreTab === "whatif" && (whatIf.size > 0 || whatIfMean.size > 0) && (
-                  <button
-                    onClick={clearWhatIfAll}
-                    className="text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {t.board.whatIfClearAll}
-                  </button>
-                )}
-                {exploreTab === "altreality" && altRealityOn && (
+                {altRealityOn && (
                   <button
                     onClick={resetAltReality}
                     className="text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
@@ -1265,193 +1100,17 @@ function LeagueBoard() {
                   </button>
                 )}
                 <button
-                  onClick={closeExplore}
+                  onClick={() => setAltRealityOpen(false)}
                   title={t.common.close}
                   aria-label={t.common.close}
-                  className={`inline-flex items-center justify-center size-8 rounded-md transition-colors ${
-                    exploreTab === "whatif"
-                      ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
-                      : "bg-violet-500/15 text-violet-400 hover:bg-violet-500/25"
-                  }`}
+                  className="inline-flex items-center justify-center size-8 rounded-md transition-colors bg-violet-500/15 text-violet-400 hover:bg-violet-500/25"
                 >
                   <X className="size-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Tab switcher */}
-            <div className="mt-4 inline-flex rounded-lg bg-surface-elevated p-0.5 gap-0.5">
-              <button
-                onClick={() => setExploreTab("whatif")}
-                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                  exploreTab === "whatif"
-                    ? "bg-amber-500 text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <FlaskConical className="size-3.5" />
-                {t.board.whatIf}
-              </button>
-              {rounds.some((r) => r.locked_at !== null) && (
-                <button
-                  onClick={() => setExploreTab("altreality")}
-                  className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                    exploreTab === "altreality"
-                      ? "bg-violet-500 text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Shuffle className="size-3.5" />
-                  {t.board.altReality}
-                </button>
-              )}
-            </div>
-
-            {exploreTab === "whatif" ? (
-              whatIfRounds.length === 0 ? (
-                <p className="text-sm text-muted-foreground mt-4">{t.board.whatIfNoRounds}</p>
-              ) : (
-                <>
-                  <div className="mt-4">
-                    <p className="text-xs text-muted-foreground mb-3">
-                      {t.board.whatIfSliderIntro}
-                    </p>
-                    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
-                      {players.map((p) => {
-                        const mean = whatIfMean.get(p.id) ?? playerDefaultMean.get(p.id) ?? 70;
-                        const touched = whatIfMean.has(p.id);
-                        return (
-                          <div key={p.id} className="flex flex-col gap-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-display text-sm font-medium truncate">
-                                {p.name}
-                              </span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-mono tabular-nums text-sm text-amber-400">
-                                  {Math.round(mean)}
-                                </span>
-                                {touched && (
-                                  <button
-                                    onClick={() => resetWhatIfPlayerMean(p.id)}
-                                    title={t.board.whatIfSliderReset}
-                                    aria-label={t.board.whatIfSliderReset}
-                                    className="text-muted-foreground/60 hover:text-foreground transition-colors"
-                                  >
-                                    <X className="size-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <Slider
-                              value={[mean]}
-                              min={0}
-                              max={SCORE_MAX}
-                              step={1}
-                              onValueChange={([v]) => setWhatIfPlayerMean(p.id, v)}
-                              aria-label={p.name}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      onClick={() => setWhatIfAdvancedOn((on) => !on)}
-                      className="mt-4 text-[11px] text-muted-foreground hover:text-foreground transition-colors underline decoration-dotted underline-offset-2"
-                    >
-                      {t.board.whatIfAdvanced}
-                    </button>
-                  </div>
-
-                  {whatIfAdvancedOn && (
-                    <div className="mt-4 pt-4 border-t border-amber-500/20">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] uppercase tracking-wider text-muted-foreground mr-1">
-                          {t.board.whatIfPickRound}
-                        </span>
-                        {whatIfRounds.map((r) => {
-                          const active = selectedWhatIfRound?.id === r.id;
-                          const count = players.filter((p) => whatIf.has(`${p.id}:${r.id}`)).length;
-                          return (
-                            <button
-                              key={r.id}
-                              onClick={() => setWhatIfRoundId(r.id)}
-                              className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-                                active
-                                  ? "bg-amber-500/25 text-amber-300"
-                                  : "bg-surface-elevated text-muted-foreground hover:text-foreground"
-                              }`}
-                              title={r.name}
-                            >
-                              {r.short}
-                              {count > 0 && (
-                                <span className="text-[10px] opacity-70">({count})</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {selectedWhatIfRound && (
-                        <div className="mt-4">
-                          <div className="flex items-center justify-between mb-2 gap-3">
-                            <h3 className="text-sm font-medium">
-                              {t.board.whatIfRoundLabel(selectedWhatIfRound.name)}
-                            </h3>
-                            {players.some((p) =>
-                              whatIf.has(`${p.id}:${selectedWhatIfRound.id}`),
-                            ) && (
-                              <button
-                                onClick={() => clearWhatIfRound(selectedWhatIfRound.id)}
-                                className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
-                              >
-                                {t.board.whatIfClearRound}
-                              </button>
-                            )}
-                          </div>
-                          {players.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">{t.board.noPlayers}</p>
-                          ) : (
-                            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2">
-                              {players.map((p) => {
-                                const key = `${p.id}:${selectedWhatIfRound.id}`;
-                                const raw = whatIf.get(key);
-                                return (
-                                  <div key={p.id} className="flex items-center gap-3">
-                                    <span className="font-display text-sm font-medium truncate flex-1 min-w-0">
-                                      {p.name}
-                                    </span>
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      value={raw === undefined ? "" : String(raw)}
-                                      onChange={(e) =>
-                                        setWhatIfScore(p.id, selectedWhatIfRound.id, e.target.value)
-                                      }
-                                      onBlur={(e) => {
-                                        const next = parseDraftPoints(e.target.value);
-                                        setWhatIfScore(
-                                          p.id,
-                                          selectedWhatIfRound.id,
-                                          next === null ? "" : String(next),
-                                        );
-                                      }}
-                                      placeholder="—"
-                                      aria-label={p.name}
-                                      className="bg-input border border-amber-500/30 rounded-md px-3 py-1.5 text-right font-mono tabular-nums text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 w-20"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )
-            ) : rounds.filter((r) => r.locked_at !== null).length === 0 ? (
+            {rounds.filter((r) => r.locked_at !== null).length === 0 ? (
               <p className="text-sm text-muted-foreground mt-4">{t.board.altRealityNoRounds}</p>
             ) : (
               <div className="mt-4">
@@ -1483,6 +1142,17 @@ function LeagueBoard() {
         </section>
       )}
 
+      {claimedPlayerId && (
+        <PathToVictoryPanel
+          players={players}
+          standings={baseStandings}
+          rounds={altRealityRounds}
+          scoreMap={scoreMap}
+          roundsPlayedCount={roundsPlayedIds.length}
+          claimedPlayerId={claimedPlayerId}
+        />
+      )}
+
       {/* Leaderboard */}
       <section className="max-w-6xl mx-auto px-6 pb-24">
         <div className="bg-surface/60 backdrop-blur border border-border rounded-2xl shadow-card overflow-hidden">
@@ -1492,27 +1162,30 @@ function LeagueBoard() {
               <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
                 {t.board.standingsSummary(players.length, rounds.length)}
               </p>
-              {/* Explore + H2H: the user-facing "poke at the data" tools, kept
-                  next to the standings they affect rather than up with the
-                  admin controls in the header. */}
+              {/* Change the Past + H2H: the user-facing "poke at the data"
+                  tools, kept next to the standings they affect rather than up
+                  with the admin controls in the header. Path to Victory shows
+                  inline above the table instead of behind a toggle. */}
               <div className="mt-2.5 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={toggleExplore}
-                  className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                    exploreTab !== null
-                      ? "bg-indigo-500 text-white shadow-sm hover:bg-indigo-500/90"
-                      : exploreActive
-                        ? "border border-indigo-400/70 text-indigo-300 bg-indigo-500/25 hover:bg-indigo-500/35"
-                        : "border border-indigo-400/80 text-indigo-300 bg-indigo-500/20 hover:bg-indigo-500/30"
-                  }`}
-                  title={t.board.exploreTitle}
-                >
-                  <Wand2 className="size-3.5" />
-                  {t.board.explore}
-                  {exploreActive && exploreTab === null && (
-                    <span className="size-1.5 rounded-full bg-indigo-400" aria-hidden="true" />
-                  )}
-                </button>
+                {hasLockedRounds && (
+                  <button
+                    onClick={() => setAltRealityOpen((open) => !open)}
+                    className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+                      altRealityOpen
+                        ? "bg-violet-500 text-white shadow-sm hover:bg-violet-500/90"
+                        : altRealityOn
+                          ? "border border-violet-400/70 text-violet-300 bg-violet-500/25 hover:bg-violet-500/35"
+                          : "border border-violet-400/80 text-violet-300 bg-violet-500/20 hover:bg-violet-500/30"
+                    }`}
+                    title={t.board.altRealityTitle}
+                  >
+                    <Shuffle className="size-3.5" />
+                    {t.board.altReality}
+                    {altRealityOn && !altRealityOpen && (
+                      <span className="size-1.5 rounded-full bg-violet-400" aria-hidden="true" />
+                    )}
+                  </button>
+                )}
                 {players.length >= 2 && (
                   <button
                     onClick={() => setShowH2H(true)}
@@ -1763,6 +1436,7 @@ function LeagueBoard() {
           players={players}
           rounds={rounds}
           scoreMap={scoreMap}
+          standings={baseStandings}
           claimedPlayerId={claimedPlayerId}
           onClose={() => setShowH2H(false)}
         />
@@ -2522,24 +2196,35 @@ function H2HModal({
   players,
   rounds,
   scoreMap,
+  standings,
   claimedPlayerId,
   onClose,
 }: Readonly<{
   players: Player[];
   rounds: Round[];
   scoreMap: Map<string, number>;
+  standings: StandingRow<Player>[];
   claimedPlayerId: string | null;
   onClose: () => void;
 }>) {
   const t = useT();
   const otherPlayer = (excludeId: string | null) =>
     players.find((p) => p.id !== excludeId)?.id ?? null;
-  const [playerAId, setPlayerAId] = useState<string | null>(
-    claimedPlayerId ?? players[0]?.id ?? null,
-  );
-  const [playerBId, setPlayerBId] = useState<string | null>(
-    otherPlayer(claimedPlayerId ?? players[0]?.id ?? null),
-  );
+
+  // Default matchup: the claimed player against the league leader — or, if the
+  // claimed player IS the leader, against their nearest chaser instead. Falls
+  // back to leader-vs-chaser when nothing is claimed.
+  const rankOf = (id: string | null) => standings.find((r) => r.player.id === id)?.rank;
+  const byRank = (rank: number) => standings.find((r) => r.rank === rank)?.player.id ?? null;
+  const leaderId = byRank(1);
+  const defaultAId = claimedPlayerId ?? leaderId ?? players[0]?.id ?? null;
+  const defaultBId =
+    defaultAId !== null && rankOf(defaultAId) === 1
+      ? (byRank(2) ?? otherPlayer(defaultAId))
+      : (leaderId ?? otherPlayer(defaultAId));
+
+  const [playerAId, setPlayerAId] = useState<string | null>(defaultAId);
+  const [playerBId, setPlayerBId] = useState<string | null>(defaultBId);
 
   const lockedRounds = useMemo(() => rounds.filter((r) => r.locked_at !== null), [rounds]);
   const roundLabelById = useMemo(
@@ -2650,6 +2335,100 @@ function H2HModal({
         </div>
       )}
     </Modal>
+  );
+}
+
+// Minimum rounds played before Path to Victory has enough data to be useful —
+// mirrors the Badge grace period (see src/lib/badges.ts: MIN_PLAYED).
+const PATH_TO_VICTORY_MIN_PLAYED = 2;
+
+function PathToVictoryPanel({
+  players,
+  standings,
+  rounds,
+  scoreMap,
+  roundsPlayedCount,
+  claimedPlayerId,
+}: Readonly<{
+  players: Player[];
+  standings: StandingRow<Player>[];
+  rounds: Round[];
+  scoreMap: Map<string, number>;
+  roundsPlayedCount: number;
+  claimedPlayerId: string;
+}>) {
+  const t = useT();
+  const [subjectOverride, setSubjectOverride] = useState<string | null>(null);
+  const subjectId = subjectOverride ?? claimedPlayerId;
+
+  const ranks = useMemo(() => new Map(standings.map((r) => [r.player.id, r.rank])), [standings]);
+  const roundsForCalc = useMemo(
+    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null })),
+    [rounds],
+  );
+  const playerById = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
+  const score = useCallback(
+    (pid: string, rid: string) => scoreMap.get(`${pid}:${rid}`),
+    [scoreMap],
+  );
+
+  const result = useMemo(
+    () => computePathToVictory({ rounds: roundsForCalc, score, ranks, subjectId }),
+    [roundsForCalc, score, ranks, subjectId],
+  );
+
+  if (roundsPlayedCount < PATH_TO_VICTORY_MIN_PLAYED) return null;
+  if (result.status === "no-rounds-left") return null;
+
+  return (
+    <section className="max-w-6xl mx-auto px-6 pb-2">
+      <div className="rounded-2xl border p-5 border-emerald-500/40 bg-emerald-500/5 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-emerald-500/15 text-emerald-400">
+              <Target className="size-4" />
+            </span>
+            <div>
+              <h2 className="font-display text-lg font-semibold">{t.board.pathToVictory}</h2>
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
+                {t.board.pathToVictorySubtitle}
+              </p>
+            </div>
+          </div>
+          <label className="shrink-0">
+            <span className="sr-only">{t.board.pathToVictoryPlayerLabel}</span>
+            <select
+              value={subjectId}
+              onChange={(e) => setSubjectOverride(e.target.value)}
+              aria-label={t.board.pathToVictoryPlayerLabel}
+              className="rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
+            >
+              {players.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <p className="font-display text-lg font-semibold leading-snug mt-4">
+          {result.status === "leading"
+            ? result.chaserId
+              ? t.board.pathToVictoryLeading(
+                  playerById.get(result.chaserId) ?? "",
+                  result.requiredAverage,
+                )
+              : t.board.pathToVictoryLeadingSolo
+            : result.impossible
+              ? t.board.pathToVictoryImpossible(playerById.get(result.leaderId) ?? "")
+              : t.board.pathToVictoryChasing(
+                  playerById.get(result.leaderId) ?? "",
+                  result.requiredAverage,
+                )}
+        </p>
+      </div>
+    </section>
   );
 }
 

@@ -180,23 +180,17 @@ export const pt = {
     moreActions: "Mais ações",
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
-    explore: "Explorar",
-    exploreTitle: "Adivinha o futuro ou muda o passado — nunca guardado",
-
-    whatIf: "Adivinha o futuro",
-    whatIfTitle: "Projeta onde a classificação pode chegar, sem guardar",
-    whatIfActive: "Modo adivinha o futuro",
-    whatIfBanner:
-      "Modo adivinha o futuro — estas pontuações nunca são guardadas. A classificação e as probabilidades abaixo são simuladas a partir delas.",
-    whatIfClearAll: "Limpar tudo",
-    whatIfClearRound: "Limpar ronda",
-    whatIfPickRound: "Ronda",
-    whatIfNoRounds:
-      "Ainda não há rondas para adivinhar. Adivinha o futuro aplica-se a rondas que ainda não foram jogadas e não estão bloqueadas.",
-    whatIfRoundLabel: (name: string) => `Pontuações previstas · ${name}`,
-    whatIfSliderIntro: "Arrasta a média esperada de cada jogador para as rondas seguintes.",
-    whatIfSliderReset: "Repor para a média",
-    whatIfAdvanced: "Avançado: pontuações exatas por ronda",
+    pathToVictory: "Caminho para a vitória",
+    pathToVictorySubtitle:
+      "Uma projeção, não uma garantia — assume que o líder mantém a sua própria média.",
+    pathToVictoryPlayerLabel: "Jogador",
+    pathToVictoryLeading: (name: string, avg: number) =>
+      `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para te apanhar.`,
+    pathToVictoryLeadingSolo: "Ainda não há mais ninguém na liga para te perseguir.",
+    pathToVictoryChasing: (name: string, avg: number) =>
+      `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para apanhar ${name}.`,
+    pathToVictoryImpossible: (name: string) =>
+      `A diferença é grande demais para fechar — nem uma série perfeita chegaria para apanhar ${name}.`,
 
     altReality: "Muda o passado",
     altRealityTitle: "Excluir rondas já jogadas da classificação para ver o quanto contaram",

@@ -65,12 +65,6 @@ export function toSimRound(r: { id: string; locked_at: string | null; short: str
   return { id: r.id, locked: r.locked_at !== null, short: r.short };
 }
 
-/** Mean of a player's played scores; the What-if slider's default position. */
-export function playerAverage(scores: number[]): number | null {
-  if (!scores.length) return null;
-  return scores.reduce((a, b) => a + b, 0) / scores.length;
-}
-
 /**
  * Probability each player ends the league in first place. Locked rounds are banked;
  * unlocked rounds (provisional or unplayed) are simulated. Returns a map of
@@ -82,18 +76,9 @@ export function simulateWinProbability(params: {
   score: ScoreLookup;
   /** Antithetic pairs; total trials = pairs * 2. Defaults to 3000 (6000 trials). */
   pairs?: number;
-  /**
-   * What-if slider: playerId -> expected average future score (mean). Overrides
-   * the shrinkage-derived projection for that player only; variance still comes
-   * from their own observed round-to-round spread (falling back to the league's
-   * when they have fewer than 2 played rounds), so future rounds stay a
-   * distribution around the mean rather than a flat repeated value.
-   */
-  whatIfMean?: Map<string, number>;
 }): Map<string, number> {
   const { players, rounds, score } = params;
   const PAIRS = params.pairs ?? 3000;
-  const whatIfMean = params.whatIfMean;
 
   const counts = new Map<string, number>();
   players.forEach((p) => counts.set(p.id, 0));
@@ -137,18 +122,8 @@ export function simulateWinProbability(params: {
       .filter((v): v is number => typeof v === "number");
     const n = vals.length;
     const rawMean = n ? vals.reduce((a, b) => a + b, 0) / n : leagueStats.mean;
-    const override = whatIfMean?.get(p.id);
-    const projMean =
-      override !== undefined
-        ? override
-        : (rawMean * n + leagueStats.mean * PRIOR_K) / (n + PRIOR_K);
-    // Slider mode uses the player's own observed round-to-round spread instead
-    // of the shrinkage-narrowed skill SD, so the mean stays a distribution
-    // (never a flat repeated value); a league-wide fallback covers players with
-    // fewer than 2 played rounds, who don't have enough data for their own std.
-    const ownStd =
-      n >= 2 ? Math.sqrt(vals.reduce((a, v) => a + (v - rawMean) ** 2, 0) / n) : leagueStats.std;
-    const skillSD = override !== undefined ? ownStd : leagueStats.std / Math.sqrt(n + PRIOR_K);
+    const projMean = (rawMean * n + leagueStats.mean * PRIOR_K) / (n + PRIOR_K);
+    const skillSD = leagueStats.std / Math.sqrt(n + PRIOR_K);
     // Provisional score for each open round, or null when unplayed.
     const provisional = openRounds.map((r) => {
       const v = score(p.id, r.id);

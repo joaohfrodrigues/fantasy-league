@@ -46,25 +46,4 @@ describe("computeLiveMetrics", () => {
     // even though totals (p1: 130, p2: 130) are level.
     expect(standings.find((r) => r.player.id === "p2")?.rank).toBe(1);
   });
-
-  it("passes whatIfMean through to the simulation", () => {
-    const rounds = [
-      { id: "r1", locked: true },
-      { id: "r2", locked: false },
-    ];
-    const score = lookup({ "p1:r1": 50, "p2:r1": 50 });
-    const withOverride = computeLiveMetrics({
-      players,
-      rounds,
-      score,
-      tiebreak: "total",
-      whatIfMean: new Map([
-        ["p1", 150],
-        ["p2", 0],
-      ]),
-      pairs: 200,
-    });
-    // A strong What-if override for p1 should make p1 near-certain to win.
-    expect(withOverride.winProbability.get("p1")).toBeGreaterThan(0.9);
-  });
 });

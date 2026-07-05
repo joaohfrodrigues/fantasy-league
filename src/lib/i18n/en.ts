@@ -177,23 +177,17 @@ export const en: Dict = {
     moreActions: "More actions",
     moreActionsLocked: "Unlock to access more actions.",
 
-    explore: "Explore",
-    exploreTitle: "Guess the future or change the past — never saved",
-
-    whatIf: "Guess the future",
-    whatIfTitle: "Project where the standings could land, without saving",
-    whatIfActive: "Guess-the-future mode",
-    whatIfBanner:
-      "Guess-the-future mode — these scores are never saved. The standings and odds below are simulated from them.",
-    whatIfClearAll: "Clear all",
-    whatIfClearRound: "Clear round",
-    whatIfPickRound: "Round",
-    whatIfNoRounds:
-      "No rounds to guess yet. Guess the future works on rounds that haven't been played and aren't locked.",
-    whatIfRoundLabel: (name: string) => `Guessed scores · ${name}`,
-    whatIfSliderIntro: "Drag each player's expected average for the rounds still to come.",
-    whatIfSliderReset: "Reset to average",
-    whatIfAdvanced: "Advanced: exact per-round scores",
+    pathToVictory: "Path to victory",
+    pathToVictorySubtitle:
+      "A projection, not a guarantee — assumes the leader keeps pace with their own average.",
+    pathToVictoryPlayerLabel: "Player",
+    pathToVictoryLeading: (name: string, avg: number) =>
+      `${name} needs to average ${Math.round(avg)} pts/round to catch you.`,
+    pathToVictoryLeadingSolo: "No one else in the league to chase you yet.",
+    pathToVictoryChasing: (name: string, avg: number) =>
+      `Average ${Math.round(avg)} pts/round over the rounds left to catch ${name}.`,
+    pathToVictoryImpossible: (name: string) =>
+      `The gap is too big to close — even a flawless run wouldn't catch ${name}.`,
 
     altReality: "Change the past",
     altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",
