@@ -1,5 +1,4 @@
 import { createFileRoute, useParams, Link } from "@tanstack/react-router";
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -17,9 +16,6 @@ import {
   Unlock,
   Trash2,
   ArrowLeft,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   TrendingUp,
   TrendingDown,
   Sigma,
@@ -72,6 +68,13 @@ import { assignBadges } from "@/lib/badges";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  StandingsTable,
+  RoundPrizeCell,
+  DinnerBar,
+  type StandingsColumn,
+  type StandingsRow,
+} from "@/components/StandingsTable";
 
 export const Route = createFileRoute("/$slug")({
   head: ({ params }) => {
@@ -504,24 +507,18 @@ function LeagueBoard() {
   }, [players, rounds, scoreMap]);
 
   // Mobile reveals only the most recently played round columns, widening to show
-  // more as the viewport grows (lg shows all). Maps each round to its responsive
-  // visibility class by recency among played rounds; default keeps the lg-only
-  // behavior for older/unplayed rounds.
-  const roundColClassById = useMemo(() => {
+  // more as the viewport grows (lg shows all). Maps each round to its recency
+  // rank among played rounds (0 = most recent); StandingsTable turns that into
+  // the actual responsive visibility class.
+  const roundRecencyById = useMemo(() => {
     const playedInOrder = rounds.filter((r) => roundMaxById.has(r.id));
     const recency = new Map<string, number>();
     playedInOrder.forEach((r, idx) => recency.set(r.id, playedInOrder.length - 1 - idx));
-    const byRecency = ["table-cell", "hidden sm:table-cell", "hidden md:table-cell"];
-    const m = new Map<string, string>();
-    rounds.forEach((r) => {
-      const rank = recency.get(r.id);
-      m.set(
-        r.id,
-        rank !== undefined && rank < byRecency.length ? byRecency[rank] : "hidden lg:table-cell",
-      );
-    });
-    return m;
+    return recency;
   }, [rounds, roundMaxById]);
+
+  // Drives DinnerBar's reveal animation (0% -> actual width on mount).
+  const dinnerBarMounted = useMounted();
 
   const standings = useMemo(() => {
     const withRank = [...baseStandings];
@@ -872,6 +869,176 @@ function LeagueBoard() {
   }
 
   const roundsPlayedCount = roundsPlayedIds.length;
+
+  const standingsColumns: StandingsColumn[] = rounds.map((r) => ({
+    id: r.id,
+    short: r.short,
+    fullTitle: r.name,
+    locked: r.locked_at !== null,
+    recencyRank: roundRecencyById.get(r.id) ?? null,
+  }));
+
+  const standingsRows: StandingsRow[] = standings.map((row, i) => {
+    const isLeader = row.rank === 1 && row.agg > 0;
+    const dl = dinnerLabel(row.prob, players.length, t);
+    const isClaimed = claimedPlayerId === row.player.id;
+    const wins = lockedWinsByPlayer.get(row.player.id) ?? 0;
+    const openUp = i >= standings.length - 3;
+    return {
+      id: row.player.id,
+      rank: row.rank,
+      isLeader,
+      rowClassName: `hover:bg-surface-elevated/50 transition-colors ${
+        flashIds.has(row.player.id) ? "animate-row-flash" : ""
+      } ${isClaimed ? "bg-pitch/5" : ""}`,
+      player: (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-display font-semibold text-base">{row.player.name}</span>
+          {(badgesByPlayer.get(row.player.id) ?? []).map((bid) => (
+            <span
+              key={bid}
+              className="text-sm leading-none"
+              title={t.board.badges[bid]}
+              aria-label={t.board.badges[bid]}
+            >
+              {BADGE_EMOJI[bid]}
+            </span>
+          ))}
+          {unlocked && (
+            <button
+              onClick={() => setRemovePlayerTarget(row.player)}
+              className="text-muted-foreground/40 hover:text-[color:oklch(0.7_0.2_25)] transition-colors"
+              title={t.board.removePlayer}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => toggleClaim(row.player.id)}
+            className={`transition-colors ${
+              isClaimed ? "text-pitch" : "text-muted-foreground/30 hover:text-muted-foreground"
+            }`}
+            title={isClaimed ? t.board.unclaimRow : t.board.claimRow}
+            aria-label={isClaimed ? t.board.unclaimRow : t.board.claimRow}
+          >
+            <UserCheck className="size-3.5" />
+          </button>
+          {isClaimed && (
+            <button
+              onClick={() => shareMyOdds(row.player.id)}
+              className="text-muted-foreground/50 hover:text-foreground transition-colors"
+              title={t.board.shareMyOdds}
+              aria-label={t.board.shareMyOdds}
+            >
+              <Share2 className="size-3.5" />
+            </button>
+          )}
+        </div>
+      ),
+      mobileSummary: (
+        <>
+          {wins > 0 &&
+            (unlocked ? (
+              <RoundPrizeCell
+                emoji={row.player.round_prize || "🥇"}
+                wins={wins}
+                openUp={openUp}
+                editable={unlocked}
+                open={mobileRoundPrizePickerFor === row.player.id}
+                onToggle={() =>
+                  setMobileRoundPrizePickerFor((cur) =>
+                    cur === row.player.id ? null : row.player.id,
+                  )
+                }
+                onPick={(d) => setRoundPrize(row.player.id, d)}
+                prizeEmojis={PRIZE_EMOJIS}
+                pickerTitle={t.board.changeRoundPrizeEmoji}
+                closeLabel={t.common.close}
+              />
+            ) : (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="leading-none">{row.player.round_prize || "🥇"}</span>
+                <span className="font-mono tabular-nums">×{wins}</span>
+              </span>
+            ))}
+          {wins > 0 && <span aria-hidden="true">·</span>}
+          <span>
+            <span className="mr-1">{dl.emoji}</span>
+            {Math.round(row.prob * 100)}%
+          </span>
+        </>
+      ),
+      prizeCell: (
+        <RoundPrizeCell
+          emoji={row.player.round_prize || "🥇"}
+          wins={lockedWinsByPlayer.get(row.player.id) ?? 0}
+          openUp={openUp}
+          editable={unlocked}
+          open={roundPrizePickerFor === row.player.id}
+          onToggle={() =>
+            setRoundPrizePickerFor((cur) => (cur === row.player.id ? null : row.player.id))
+          }
+          onPick={(d) => setRoundPrize(row.player.id, d)}
+          prizeEmojis={PRIZE_EMOJIS}
+          pickerTitle={t.board.changeRoundPrizeEmoji}
+          closeLabel={t.common.close}
+        />
+      ),
+      dinnerCell: (
+        <DinnerBar prob={row.prob} label={dl.label} emoji={dl.emoji} active={dinnerBarMounted} />
+      ),
+      scores: Object.fromEntries(
+        rounds.map((r) => {
+          const rid = r.id;
+          const roundLocked = r.locked_at !== null;
+          // Cell value comes from scoreOf directly (not row.perRound):
+          // Alternative Reality can filter perRound down to a subset of
+          // rounds for totals/rank while every round column still shows.
+          const v = scoreOf(row.player.id, rid) ?? null;
+          const roundMax = roundMaxById.get(rid);
+          const isRoundWin = v !== null && roundMax !== undefined && v === roundMax;
+          const isWhatIf = whatIf.has(`${row.player.id}:${rid}`);
+          const isExcluded = altRealityOn && altRealityExcluded.has(rid);
+          const content =
+            v === null ? (
+              <span className="text-muted-foreground/30">—</span>
+            ) : isExcluded ? (
+              <span className="line-through">{v}</span>
+            ) : isWhatIf ? (
+              <span className="text-amber-400 italic">{v}</span>
+            ) : isRoundWin && roundLocked ? (
+              // Banked round win (round is final).
+              <span className="text-pitch font-bold">{v}</span>
+            ) : isRoundWin ? (
+              // Currently leading an unlocked round — provisional, not yet tallied.
+              <span
+                className="text-pitch/60 font-bold underline decoration-dotted underline-offset-2"
+                title={t.board.provisionalWin}
+              >
+                {v}
+              </span>
+            ) : (
+              v
+            );
+          return [
+            rid,
+            {
+              content,
+              className: isExcluded ? "opacity-30" : "",
+              title: isExcluded ? t.board.altRealityActive : undefined,
+            },
+          ];
+        }),
+      ),
+      total: (
+        <span
+          className={`font-display font-bold tabular-nums text-xl ${isLeader ? "text-pitch" : ""}`}
+        >
+          {row.agg}
+        </span>
+      ),
+    };
+  });
 
   return (
     <div className="min-h-screen">
@@ -1514,264 +1681,32 @@ function LeagueBoard() {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border/40">
-                  <th className="text-left font-medium px-6 py-3 w-10">#</th>
-                  <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
-                  <th className="text-left font-medium py-3 hidden md:table-cell">
-                    <button
-                      type="button"
-                      onClick={() => sortBy("prizes")}
-                      title={t.board.sortBy(t.board.colRoundPrizes)}
-                      className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
-                        sortKey === "prizes" ? "text-foreground" : ""
-                      }`}
-                    >
-                      {t.board.colRoundPrizes}
-                      <SortIcon active={sortKey === "prizes"} dir={sortDir} />
-                    </button>
-                  </th>
-                  <th className="text-center font-medium py-3 hidden md:table-cell">
-                    <span className="inline-flex items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => sortBy("dinner")}
-                        title={t.board.sortBy(t.board.colDinner)}
-                        className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
-                          sortKey === "dinner" ? "text-foreground" : ""
-                        }`}
-                      >
-                        {t.board.colDinner}
-                        <SortIcon active={sortKey === "dinner"} dir={sortDir} />
-                      </button>
-                      <WinOddsInfo />
-                    </span>
-                  </th>
-                  {rounds.map((r) => (
-                    <th
-                      key={r.id}
-                      className={`text-center font-medium py-3 px-1.5 ${roundColClassById.get(r.id) ?? "hidden lg:table-cell"}`}
-                      title={r.name}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => sortBy(r.id)}
-                        title={t.board.sortBy(r.name)}
-                        className={`uppercase tracking-wider inline-flex items-center gap-0.5 hover:text-foreground transition-colors ${
-                          sortKey === r.id ? "text-foreground" : ""
-                        } ${r.locked_at ? "" : "italic opacity-70"}`}
-                      >
-                        {r.locked_at && <Lock className="size-2.5" aria-hidden="true" />}
-                        {r.short}
-                        <SortIcon active={sortKey === r.id} dir={sortDir} />
-                      </button>
-                    </th>
-                  ))}
-                  <th className="text-right font-medium px-6 py-3">
-                    <button
-                      type="button"
-                      onClick={() => sortBy("total")}
-                      title={t.board.sortBy(t.board.colTotal)}
-                      className={`uppercase tracking-wider inline-flex items-center gap-1 hover:text-foreground transition-colors ${
-                        sortKey === "total" ? "text-foreground" : ""
-                      }`}
-                    >
-                      {t.board.colTotal}
-                      <SortIcon active={sortKey === "total"} dir={sortDir} />
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((row, i) => {
-                  const isLeader = row.rank === 1 && row.agg > 0;
-                  const dl = dinnerLabel(row.prob, players.length, t);
-                  const isClaimed = claimedPlayerId === row.player.id;
-                  const wins = lockedWinsByPlayer.get(row.player.id) ?? 0;
-                  return (
-                    <tr
-                      key={row.player.id}
-                      className={`border-b border-border/30 last:border-0 hover:bg-surface-elevated/50 transition-colors ${
-                        flashIds.has(row.player.id) ? "animate-row-flash" : ""
-                      } ${isClaimed ? "bg-pitch/5" : ""}`}
-                    >
-                      <td className="px-6 py-4 text-muted-foreground tabular-nums align-top">
-                        {isLeader ? (
-                          <span className="inline-flex size-6 rounded-full gradient-pitch text-primary-foreground items-center justify-center text-xs font-bold">
-                            {row.rank}
-                          </span>
-                        ) : (
-                          <span className="text-base">{row.rank}</span>
-                        )}
-                      </td>
-                      <td className="py-4 align-top">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-display font-semibold text-base">
-                            {row.player.name}
-                          </span>
-                          {(badgesByPlayer.get(row.player.id) ?? []).map((bid) => (
-                            <span
-                              key={bid}
-                              className="text-sm leading-none"
-                              title={t.board.badges[bid]}
-                              aria-label={t.board.badges[bid]}
-                            >
-                              {BADGE_EMOJI[bid]}
-                            </span>
-                          ))}
-                          {unlocked && (
-                            <button
-                              onClick={() => setRemovePlayerTarget(row.player)}
-                              className="text-muted-foreground/40 hover:text-[color:oklch(0.7_0.2_25)] transition-colors"
-                              title={t.board.removePlayer}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => toggleClaim(row.player.id)}
-                            className={`transition-colors ${
-                              isClaimed
-                                ? "text-pitch"
-                                : "text-muted-foreground/30 hover:text-muted-foreground"
-                            }`}
-                            title={isClaimed ? t.board.unclaimRow : t.board.claimRow}
-                            aria-label={isClaimed ? t.board.unclaimRow : t.board.claimRow}
-                          >
-                            <UserCheck className="size-3.5" />
-                          </button>
-                          {isClaimed && (
-                            <button
-                              onClick={() => shareMyOdds(row.player.id)}
-                              className="text-muted-foreground/50 hover:text-foreground transition-colors"
-                              title={t.board.shareMyOdds}
-                              aria-label={t.board.shareMyOdds}
-                            >
-                              <Share2 className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1 md:hidden flex items-center gap-1.5">
-                          {wins > 0 &&
-                            (unlocked ? (
-                              <RoundPrizeCell
-                                player={row.player}
-                                wins={wins}
-                                openUp={i >= standings.length - 3}
-                                editable={unlocked}
-                                open={mobileRoundPrizePickerFor === row.player.id}
-                                onToggle={() =>
-                                  setMobileRoundPrizePickerFor((cur) =>
-                                    cur === row.player.id ? null : row.player.id,
-                                  )
-                                }
-                                onPick={(d) => setRoundPrize(row.player.id, d)}
-                              />
-                            ) : (
-                              <span className="inline-flex items-center gap-0.5">
-                                <span className="leading-none">
-                                  {row.player.round_prize || "🥇"}
-                                </span>
-                                <span className="font-mono tabular-nums">×{wins}</span>
-                              </span>
-                            ))}
-                          {wins > 0 && <span aria-hidden="true">·</span>}
-                          <span>
-                            <span className="mr-1">{dl.emoji}</span>
-                            {Math.round(row.prob * 100)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-4 align-top hidden md:table-cell">
-                        <RoundPrizeCell
-                          player={row.player}
-                          wins={lockedWinsByPlayer.get(row.player.id) ?? 0}
-                          openUp={i >= standings.length - 3}
-                          editable={unlocked}
-                          open={roundPrizePickerFor === row.player.id}
-                          onToggle={() =>
-                            setRoundPrizePickerFor((cur) =>
-                              cur === row.player.id ? null : row.player.id,
-                            )
-                          }
-                          onPick={(d) => setRoundPrize(row.player.id, d)}
-                        />
-                      </td>
-                      <td className="py-4 align-top hidden md:table-cell">
-                        <DinnerBar prob={row.prob} label={dl.label} emoji={dl.emoji} />
-                      </td>
-                      {rounds.map((r) => {
-                        const rid = r.id;
-                        const roundLocked = r.locked_at !== null;
-                        // Cell value comes from scoreOf directly (not row.perRound):
-                        // Alternative Reality can filter perRound down to a subset of
-                        // rounds for totals/rank while every round column still shows.
-                        const v = scoreOf(row.player.id, rid) ?? null;
-                        const roundMax = roundMaxById.get(rid);
-                        const isRoundWin = v !== null && roundMax !== undefined && v === roundMax;
-                        const isWhatIf = whatIf.has(`${row.player.id}:${rid}`);
-                        const isExcluded = altRealityOn && altRealityExcluded.has(rid);
-                        return (
-                          <td
-                            key={rid}
-                            className={`text-center font-mono text-xs lg:text-sm tabular-nums px-1.5 align-top py-4 ${roundColClassById.get(rid) ?? "hidden lg:table-cell"} ${isExcluded ? "opacity-30" : ""}`}
-                            title={isExcluded ? t.board.altRealityActive : undefined}
-                          >
-                            {v === null ? (
-                              <span className="text-muted-foreground/30">—</span>
-                            ) : isExcluded ? (
-                              <span className="line-through">{v}</span>
-                            ) : isWhatIf ? (
-                              <span className="text-amber-400 italic">{v}</span>
-                            ) : isRoundWin && roundLocked ? (
-                              // Banked round win (round is final).
-                              <span className="text-pitch font-bold">{v}</span>
-                            ) : isRoundWin ? (
-                              // Currently leading an unlocked round — provisional, not yet tallied.
-                              <span
-                                className="text-pitch/60 font-bold underline decoration-dotted underline-offset-2"
-                                title={t.board.provisionalWin}
-                              >
-                                {v}
-                              </span>
-                            ) : (
-                              v
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="px-6 py-4 text-right align-top">
-                        <span
-                          className={`font-display font-bold tabular-nums text-xl ${isLeader ? "text-pitch" : ""}`}
-                        >
-                          {row.agg}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {players.length === 0 && (
-                  <tr>
-                    <td colSpan={12} className="py-16 text-center">
-                      {unlocked ? (
-                        <button
-                          onClick={() => setAddingPlayer(true)}
-                          className="inline-flex items-center gap-2 rounded-lg bg-pitch px-5 py-3 text-sm font-medium text-pitch-foreground shadow-glow transition hover:opacity-90 active:scale-95"
-                        >
-                          <UserPlus className="size-4" />
-                          {t.board.addPlayersCta}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground">{t.board.noPlayers}</span>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <StandingsTable
+            columns={standingsColumns}
+            rows={standingsRows}
+            sort={{ key: sortKey, dir: sortDir, onSortBy: sortBy }}
+            dinnerHeaderExtra={<WinOddsInfo />}
+            emptyState={
+              unlocked ? (
+                <button
+                  onClick={() => setAddingPlayer(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-pitch px-5 py-3 text-sm font-medium text-pitch-foreground shadow-glow transition hover:opacity-90 active:scale-95"
+                >
+                  <UserPlus className="size-4" />
+                  {t.board.addPlayersCta}
+                </button>
+              ) : (
+                <span className="text-muted-foreground">{t.board.noPlayers}</span>
+              )
+            }
+            labels={{
+              player: t.board.colPlayer,
+              roundPrizes: t.board.colRoundPrizes,
+              dinner: t.board.colDinner,
+              total: t.board.colTotal,
+              sortBy: t.board.sortBy,
+            }}
+          />
         </div>
 
         {stats.count > 0 && (
@@ -2033,97 +1968,6 @@ function PasswordModal({
   );
 }
 
-function RoundPrizeCell({
-  player,
-  wins,
-  openUp,
-  editable,
-  open,
-  onToggle,
-  onPick,
-}: {
-  player: Player;
-  wins: number;
-  openUp: boolean;
-  editable: boolean;
-  open: boolean;
-  onToggle: () => void;
-  onPick: (d: string) => void;
-}) {
-  const t = useT();
-  const roundPrize = player.round_prize || "🥇";
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
-
-  if (!editable) {
-    return (
-      <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated">
-        <span className="text-lg leading-none">{roundPrize}</span>
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
-      </div>
-    );
-  }
-
-  function handleToggle() {
-    if (!open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      if (openUp) {
-        setPickerStyle({
-          position: "fixed",
-          left: rect.left,
-          bottom: window.innerHeight - rect.top + 6,
-          zIndex: 50,
-        });
-      } else {
-        setPickerStyle({ position: "fixed", left: rect.left, top: rect.bottom + 6, zIndex: 50 });
-      }
-    }
-    onToggle();
-  }
-
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        onClick={handleToggle}
-        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-accent transition-colors"
-        title={t.board.changeRoundPrizeEmoji}
-      >
-        <span className="text-lg leading-none">{roundPrize}</span>
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">×{wins}</span>
-      </button>
-      {open &&
-        createPortal(
-          <>
-            <button
-              type="button"
-              aria-label={t.common.close}
-              className="fixed inset-0 z-40"
-              onClick={handleToggle}
-            />
-            <div
-              style={pickerStyle}
-              className="bg-surface border border-border rounded-xl shadow-card p-2 flex gap-1"
-            >
-              {PRIZE_EMOJIS.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => onPick(d)}
-                  className={`size-9 grid place-items-center rounded-lg text-xl hover:bg-accent transition-colors ${
-                    d === roundPrize ? "bg-pitch/20 ring-1 ring-pitch" : ""
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          </>,
-          document.body,
-        )}
-    </div>
-  );
-}
-
 function WinOddsInfo() {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -2321,11 +2165,6 @@ function TiebreakInfo() {
   );
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
-  if (!active) return <ChevronsUpDown className="size-3 opacity-40" />;
-  return dir === "desc" ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />;
-}
-
 function StatCard({
   icon,
   tone,
@@ -2366,36 +2205,6 @@ function StatCard({
       </div>
       <div className="font-display font-bold text-2xl tabular-nums leading-none">{display}</div>
       {caption && <div className="text-xs text-muted-foreground truncate">{caption}</div>}
-    </div>
-  );
-}
-
-function DinnerBar({ prob, label, emoji }: { prob: number; label: string; emoji: string }) {
-  const pct = Math.round(prob * 100);
-  const mounted = useMounted();
-  return (
-    <div className="px-3 min-w-[150px]">
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="text-muted-foreground">
-          <span className="mr-1">{emoji}</span>
-          {label}
-        </span>
-        <span className="font-mono tabular-nums font-semibold">{pct}%</span>
-      </div>
-      <div className="h-1.5 rounded-full bg-surface-elevated overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700 ease-out"
-          style={{
-            width: mounted ? `${Math.max(2, pct)}%` : "0%",
-            background:
-              prob >= 0.4
-                ? "linear-gradient(90deg, oklch(0.84 0.18 168), oklch(0.6 0.23 262))"
-                : prob >= 0.15
-                  ? "linear-gradient(90deg, oklch(0.9 0.18 100), oklch(0.86 0.16 90))"
-                  : "linear-gradient(90deg, oklch(0.62 0.24 18), oklch(0.62 0.24 350))",
-          }}
-        />
-      </div>
     </div>
   );
 }

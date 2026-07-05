@@ -3,6 +3,13 @@ import { useT } from "@/lib/i18n";
 import { useInView, useCountUp } from "@/hooks/use-animations";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { assignBadges } from "@/lib/badges";
+import {
+  DinnerBar,
+  RoundPrizeCell,
+  StandingsTable,
+  type StandingsColumn,
+  type StandingsRow,
+} from "@/components/StandingsTable";
 
 // Static, read-only sample standings shown on the landing page so new users can
 // see what the tracker looks like. No live data, no simulation, no editing.
@@ -42,12 +49,6 @@ const DEMO_BADGES = assignBadges({
 
 const DINNER_EMOJI: Record<number, string> = { 1: "🍗", 2: "😋", 3: "🤞", 4: "😬", 5: "💸" };
 
-function dinnerGradient(prob: number): string {
-  if (prob >= 0.4) return "linear-gradient(90deg, oklch(0.84 0.18 168), oklch(0.6 0.23 262))";
-  if (prob >= 0.15) return "linear-gradient(90deg, oklch(0.9 0.18 100), oklch(0.86 0.16 90))";
-  return "linear-gradient(90deg, oklch(0.62 0.24 18), oklch(0.62 0.24 350))";
-}
-
 export function ExampleBoard() {
   const t = useT();
   const [ref, inView] = useInView<HTMLElement>();
@@ -55,15 +56,6 @@ export function ExampleBoard() {
   const roundMax = DEMO_ROUND_SHORTS.map((_, idx) =>
     Math.max(...DEMO_PLAYERS.map((p) => p.scores[idx])),
   );
-
-  // Mirror the live board: reveal the most recent round columns progressively by
-  // width (latest always visible, then sm/md), instead of an all-or-nothing lg
-  // cutoff. Every demo round is played, so recency follows display order.
-  const roundColClass = (idx: number): string => {
-    const recency = DEMO_ROUND_SHORTS.length - 1 - idx;
-    const byRecency = ["table-cell", "hidden sm:table-cell", "hidden md:table-cell"];
-    return recency < byRecency.length ? byRecency[recency] : "hidden lg:table-cell";
-  };
 
   const rows = DEMO_PLAYERS.map((p) => {
     const total = p.scores.reduce((a, b) => a + b, 0);
@@ -96,6 +88,70 @@ export function ExampleBoard() {
     5: t.board.dinner5,
   };
 
+  // Mirror the live board: reveal the most recent round columns progressively.
+  // Every demo round is played, so recency follows display order.
+  const columns: StandingsColumn[] = DEMO_ROUND_SHORTS.map((short, idx) => ({
+    id: short,
+    short,
+    fullTitle: t.landing.templates.matchday(idx + 1),
+    locked: true,
+    recencyRank: DEMO_ROUND_SHORTS.length - 1 - idx,
+  }));
+
+  const standingsRows: StandingsRow[] = rows.map((row, i) => {
+    const isLeader = i === 0;
+    const emoji = DINNER_EMOJI[row.tier];
+    const label = dinnerLabels[row.tier];
+    const pct = Math.round(row.prob * 100);
+    return {
+      id: row.name,
+      rank: i + 1,
+      isLeader,
+      player: (
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+          <span className="font-display font-semibold text-base">{row.name}</span>
+          {(DEMO_BADGES.get(row.name) ?? []).map((bid) => (
+            <span
+              key={bid}
+              className="text-sm leading-none"
+              title={t.board.badges[bid]}
+              aria-label={t.board.badges[bid]}
+            >
+              {BADGE_EMOJI[bid]}
+            </span>
+          ))}
+        </span>
+      ),
+      mobileSummary: (
+        <>
+          {row.wins > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              <span className="leading-none">{row.drink}</span>
+              <span className="font-mono tabular-nums">×{row.wins}</span>
+            </span>
+          )}
+          {row.wins > 0 && <span aria-hidden="true">·</span>}
+          <span>
+            <span className="mr-1">{emoji}</span>
+            {pct}%
+          </span>
+        </>
+      ),
+      prizeCell: <RoundPrizeCell emoji={row.drink} wins={row.wins} editable={false} />,
+      dinnerCell: <DinnerBar prob={row.prob} label={label} emoji={emoji} active={inView} />,
+      scores: Object.fromEntries(
+        row.scores.map((v, idx) => {
+          const isRoundWin = v === roundMax[idx];
+          return [
+            DEMO_ROUND_SHORTS[idx],
+            { content: isRoundWin ? <span className="text-pitch font-bold">{v}</span> : v },
+          ];
+        }),
+      ),
+      total: <AnimatedTotal value={row.total} active={inView} isLeader={isLeader} />,
+    };
+  });
+
   return (
     <section ref={ref} className="max-w-5xl mx-auto px-6 pb-12">
       <div
@@ -116,123 +172,19 @@ export function ExampleBoard() {
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
-                <th className="text-left font-medium px-6 py-3 w-10">#</th>
-                <th className="text-left font-medium py-3">{t.board.colPlayer}</th>
-                <th className="text-left font-medium py-3 hidden md:table-cell">
-                  {t.board.colRoundPrizes}
-                </th>
-                <th className="text-center font-medium py-3 hidden md:table-cell">
-                  {t.board.colDinner}
-                </th>
-                {DEMO_ROUND_SHORTS.map((short, idx) => (
-                  <th
-                    key={short}
-                    className={`text-center font-medium py-3 px-1.5 ${roundColClass(idx)}`}
-                    title={t.landing.templates.matchday(idx + 1)}
-                  >
-                    {short}
-                  </th>
-                ))}
-                <th className="text-right font-medium px-6 py-3">{t.board.colTotal}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => {
-                const isLeader = i === 0;
-                const emoji = DINNER_EMOJI[row.tier];
-                const label = dinnerLabels[row.tier];
-                const pct = Math.round(row.prob * 100);
-                return (
-                  <tr key={row.name} className="border-b border-border/30 last:border-0">
-                    <td className="px-6 py-4 text-muted-foreground tabular-nums align-top">
-                      {isLeader ? (
-                        <span className="inline-flex size-6 rounded-full gradient-pitch text-primary-foreground items-center justify-center text-xs font-bold">
-                          {i + 1}
-                        </span>
-                      ) : (
-                        <span className="text-base">{i + 1}</span>
-                      )}
-                    </td>
-                    <td className="py-4 align-top">
-                      <span className="inline-flex items-center gap-1.5 flex-wrap">
-                        <span className="font-display font-semibold text-base">{row.name}</span>
-                        {(DEMO_BADGES.get(row.name) ?? []).map((bid) => (
-                          <span
-                            key={bid}
-                            className="text-sm leading-none"
-                            title={t.board.badges[bid]}
-                            aria-label={t.board.badges[bid]}
-                          >
-                            {BADGE_EMOJI[bid]}
-                          </span>
-                        ))}
-                      </span>
-                      <div className="text-xs text-muted-foreground mt-1 md:hidden flex items-center gap-1.5">
-                        {row.wins > 0 && (
-                          <span className="inline-flex items-center gap-0.5">
-                            <span className="leading-none">{row.drink}</span>
-                            <span className="font-mono tabular-nums">×{row.wins}</span>
-                          </span>
-                        )}
-                        {row.wins > 0 && <span aria-hidden="true">·</span>}
-                        <span>
-                          <span className="mr-1">{emoji}</span>
-                          {pct}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 align-top hidden md:table-cell">
-                      <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-elevated">
-                        <span className="text-lg leading-none">{row.drink}</span>
-                        <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                          ×{row.wins}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 align-top hidden md:table-cell">
-                      <div className="px-3 min-w-[150px]">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-muted-foreground">
-                            <span className="mr-1">{emoji}</span>
-                            {label}
-                          </span>
-                          <span className="font-mono tabular-nums font-semibold">{pct}%</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-surface-elevated overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-700 ease-out"
-                            style={{
-                              width: inView ? `${Math.max(2, pct)}%` : "0%",
-                              background: dinnerGradient(row.prob),
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    {row.scores.map((v, idx) => {
-                      const isRoundWin = v === roundMax[idx];
-                      return (
-                        <td
-                          key={DEMO_ROUND_SHORTS[idx]}
-                          className={`text-center font-mono text-xs tabular-nums px-1.5 align-top py-4 ${roundColClass(idx)}`}
-                        >
-                          {isRoundWin ? <span className="text-pitch font-bold">{v}</span> : v}
-                        </td>
-                      );
-                    })}
-                    <td className="px-6 py-4 text-right align-top">
-                      <AnimatedTotal value={row.total} active={inView} isLeader={isLeader} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <StandingsTable
+          headerRowClassName="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40"
+          scoreCellTextClassName="text-xs"
+          columns={columns}
+          rows={standingsRows}
+          labels={{
+            player: t.board.colPlayer,
+            roundPrizes: t.board.colRoundPrizes,
+            dinner: t.board.colDinner,
+            total: t.board.colTotal,
+            sortBy: t.board.sortBy,
+          }}
+        />
 
         <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-t border-border/60">
           <StatChip
