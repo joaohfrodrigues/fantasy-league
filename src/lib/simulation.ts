@@ -43,6 +43,24 @@ const ROUND_BENCHMARKS: Record<string, { mean: number; std: number }> = {
   F: { mean: 44, std: 20 },
 };
 
+/**
+ * The mean/std a round's draw should use: its benchmark (matched by `short`,
+ * e.g. "F"), or the league's own observed stats when unmatched (group-stage
+ * rounds, which have real data to learn from instead). Shared by
+ * simulateWinProbability and Path to Victory so a knockout round is exactly
+ * as tight/loose in both.
+ */
+export function roundDrawStats(round: { short?: string }, leagueStats: LeagueStats): LeagueStats {
+  return (round.short && ROUND_BENCHMARKS[round.short.toUpperCase()]) || leagueStats;
+}
+
+// A floor on the league mean used as the skill-ratio denominator — distinct
+// from leagueStats.mean itself, which can legitimately be small. Without this,
+// a near-zero league mean would blow skillRatio up to an extreme multiplier.
+export function skillRatioBase(leagueStats: LeagueStats): number {
+  return Math.max(leagueStats.mean, 10);
+}
+
 // Small deterministic PRNG (mulberry32) so the simulation is reproducible.
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -54,7 +72,82 @@ function mulberry32(seed: number) {
   };
 }
 
+/**
+ * A seeded standard-normal generator (Box-Muller over mulberry32). Shared by
+ * simulateWinProbability and Path to Victory's own trials so both draw from
+ * the same reproducible source.
+ */
+export function createSeededRandom(seed: number): { randn: () => number } {
+  const rand = mulberry32(seed);
+  const randn = () => {
+    const u = rand() || 1e-9;
+    const v = rand() || 1e-9;
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  };
+  return { randn };
+}
+
 export type ScoreLookup = (playerId: string, roundId: string) => number | undefined;
+
+export type LeagueStats = { mean: number; std: number };
+
+/**
+ * League-wide mean/std across every played score (locked + unlocked — an
+ * unlocked result still informs the league's scoring level). Used both as the
+ * shrinkage prior for a player's own projection and, in Path to Victory, as
+ * the round-to-round variance a projection must widen for. Falls back to a
+ * fixed prior when nothing has been played yet; floors std at 20 so a
+ * suspiciously tight early sample doesn't read as more certain than it is.
+ */
+export function computeLeagueStats(
+  players: { id: string }[],
+  rounds: { id: string }[],
+  score: ScoreLookup,
+): LeagueStats {
+  const playedIds = rounds
+    .filter((r) => players.some((p) => typeof score(p.id, r.id) === "number"))
+    .map((r) => r.id);
+  const all: number[] = [];
+  playedIds.forEach((rid) => {
+    players.forEach((p) => {
+      const v = score(p.id, rid);
+      if (typeof v === "number") all.push(v);
+    });
+  });
+  if (!all.length) return { mean: 70, std: 35 };
+  const mean = all.reduce((a, b) => a + b, 0) / all.length;
+  const variance = all.reduce((a, b) => a + (b - mean) ** 2, 0) / all.length;
+  return { mean, std: Math.max(20, Math.sqrt(variance)) };
+}
+
+// Higher K keeps projections closer to the league mean for longer — with only a
+// handful of rounds played, an early hot streak shouldn't read as a confirmed
+// skill gap.
+export const PRIOR_K = 8;
+
+/**
+ * A single player's shrunk skill projection: their own average pulled toward
+ * the league mean by PRIOR_K, plus the uncertainty (skillSD) that shrinks as
+ * they play more rounds. `rounds` is filtered internally to whichever have a
+ * recorded score for this player.
+ */
+export function projectPlayerSkill(params: {
+  playerId: string;
+  rounds: { id: string }[];
+  score: ScoreLookup;
+  leagueStats: LeagueStats;
+  priorK?: number;
+}): { projMean: number; skillSD: number } {
+  const { playerId, rounds, score, leagueStats, priorK = PRIOR_K } = params;
+  const vals = rounds
+    .map((r) => score(playerId, r.id))
+    .filter((v): v is number => typeof v === "number");
+  const n = vals.length;
+  const rawMean = n ? vals.reduce((a, b) => a + b, 0) / n : leagueStats.mean;
+  const projMean = (rawMean * n + leagueStats.mean * priorK) / (n + priorK);
+  const skillSD = leagueStats.std / Math.sqrt(n + priorK);
+  return { projMean, skillSD };
+}
 
 /** Trims a DB round row to the shape simulateWinProbability needs. */
 export function toSimRound(r: { id: string; locked_at: string | null; short: string }): {
@@ -89,41 +182,20 @@ export function simulateWinProbability(params: {
 
   // Skill estimate uses ALL played scores (locked + unlocked) — an unlocked result
   // still informs a player's level, it just isn't banked as certain.
-  const playedIds = rounds
-    .filter((r) => players.some((p) => typeof score(p.id, r.id) === "number"))
-    .map((r) => r.id);
+  const leagueStats = computeLeagueStats(players, rounds, score);
 
-  const all: number[] = [];
-  playedIds.forEach((rid) => {
-    players.forEach((p) => {
-      const v = score(p.id, rid);
-      if (typeof v === "number") all.push(v);
-    });
-  });
-  const leagueStats = (() => {
-    if (!all.length) return { mean: 70, std: 35 };
-    const mean = all.reduce((a, b) => a + b, 0) / all.length;
-    const variance = all.reduce((a, b) => a + (b - mean) ** 2, 0) / all.length;
-    return { mean, std: Math.max(20, Math.sqrt(variance)) };
-  })();
-
-  // Higher K keeps projections closer to the league mean for longer — with only a
-  // handful of rounds played, an early hot streak shouldn't read as a confirmed
-  // skill gap.
-  const PRIOR_K = 8;
   const stats = players.map((p) => {
     let banked = 0;
     lockedRounds.forEach((r) => {
       const v = score(p.id, r.id);
       if (typeof v === "number") banked += v;
     });
-    const vals = playedIds
-      .map((rid) => score(p.id, rid))
-      .filter((v): v is number => typeof v === "number");
-    const n = vals.length;
-    const rawMean = n ? vals.reduce((a, b) => a + b, 0) / n : leagueStats.mean;
-    const projMean = (rawMean * n + leagueStats.mean * PRIOR_K) / (n + PRIOR_K);
-    const skillSD = leagueStats.std / Math.sqrt(n + PRIOR_K);
+    const { projMean, skillSD } = projectPlayerSkill({
+      playerId: p.id,
+      rounds,
+      score,
+      leagueStats,
+    });
     // Provisional score for each open round, or null when unplayed.
     const provisional = openRounds.map((r) => {
       const v = score(p.id, r.id);
@@ -146,24 +218,10 @@ export function simulateWinProbability(params: {
   for (const c of stats) {
     seed = (Math.imul(seed, 31) + Math.round(c.banked) + Math.round(c.projMean * 1000)) >>> 0;
   }
-  const rand = mulberry32(seed);
-  const randn = () => {
-    const u = rand() || 1e-9;
-    const v = rand() || 1e-9;
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  };
+  const { randn } = createSeededRandom(seed);
 
-  // Per-round expected mean/std: the benchmark for the round's type (matched by
-  // `short`, e.g. "F"), or the league's own observed stats when unmatched (group
-  // stage rounds, which have real data to learn from instead).
-  const openRoundStats = openRounds.map(
-    (r) => (r.short && ROUND_BENCHMARKS[r.short.toUpperCase()]) || leagueStats,
-  );
-
-  // A floor on the league mean used as the skill-ratio denominator — distinct
-  // from leagueStats.mean itself, which can legitimately be small. Without this,
-  // a near-zero league mean would blow skillRatio up to an extreme multiplier.
-  const ratioBase = Math.max(leagueStats.mean, 10);
+  const openRoundStats = openRounds.map((r) => roundDrawStats(r, leagueStats));
+  const ratioBase = skillRatioBase(leagueStats);
 
   // Precompute per-(player, round) values that don't depend on the trial's random
   // draws, so the hot Monte Carlo loop (up to PAIRS*2 iterations) only does the

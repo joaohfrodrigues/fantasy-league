@@ -1,92 +1,212 @@
 // Path to Victory (see CONTEXT.md: Path to Victory). Deep module: standings-
-// shaped inputs (rank, per-round scores) in, one actionable per-round average
-// out — hides the projection math behind a single question: "what does this
-// player need to average to catch the leader?" Built alongside simulation.ts
-// rather than on its Monte Carlo — the projection here is average + a
-// one-round safety buffer, not a full simulation (issue #21: "no new
+// shaped inputs (rank, per-round scores, the full player list) in, one
+// actionable per-round average out — hides the projection math behind a
+// single question: "what does this player need to average to have a 90%
+// chance of catching the leader?" Reuses simulation.ts's league-wide
+// mean/std, shrinkage, and per-round (knockout-benchmark-aware) draw stats
+// — see computeLeagueStats, projectPlayerSkill, roundDrawStats — so a
+// bigger or more volatile field, and a tighter Final-round variance, widen
+// or narrow the answer the same way they do Win probability. It then runs
+// its own small Monte Carlo over just the target's remaining rounds — no
+// new simulation engine, just simulation.ts's existing building blocks
+// aimed at one player instead of a multi-player race (issue #21: "no new
 // simulation infrastructure").
 
-import { SCORE_MAX, type ScoreLookup } from "./simulation";
+import {
+  SCORE_MIN,
+  SCORE_MAX,
+  computeLeagueStats,
+  projectPlayerSkill,
+  roundDrawStats,
+  skillRatioBase,
+  createSeededRandom,
+  type ScoreLookup,
+} from "./simulation";
+import { clamp } from "./utils";
 
 export type { ScoreLookup };
+
+// The confidence level the required average is solved for. Hardcoded per
+// issue #37 — no UI control to change it in this iteration.
+export const PATH_TO_VICTORY_CONFIDENCE = 0.9;
+
+// Antithetic pairs for the target's finish projection; total samples = pairs * 2.
+// Half of simulateWinProbability's default — this reads one percentile off a
+// single player's distribution rather than racing an entire field, so it
+// needs less precision per trial to be stable.
+const PAIRS = 1500;
 
 export type PathToVictoryResult =
   | { status: "no-rounds-left" }
   | { status: "leading"; requiredAverage: number; chaserId: string | null }
   | { status: "chasing"; requiredAverage: number; leaderId: string; impossible: boolean };
 
-function stdDev(values: number[]): number {
-  if (values.length < 2) return 0;
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
+function deriveSeed(nums: number[]): number {
+  let seed = (0x9e3779b9 ^ nums.length) >>> 0;
+  for (const n of nums) {
+    seed = (Math.imul(seed, 31) + Math.round(n * 1000)) >>> 0;
+  }
+  return seed;
 }
 
 /**
- * The per-round average a chaser needs to catch a target: the target's
- * projected finish (current total + their own average over the rounds left,
- * plus a one-round safety buffer from their own score spread) minus the
+ * The target's total to date across every round with a recorded score
+ * (locked or not — an in-progress unlocked round still counts toward the
+ * total, same as the round itself still counting toward rounds remaining).
+ */
+function totalToDate(rounds: { id: string }[], score: ScoreLookup, playerId: string): number {
+  return rounds.reduce((sum, r) => {
+    const v = score(playerId, r.id);
+    return sum + (typeof v === "number" ? v : 0);
+  }, 0);
+}
+
+/**
+ * The target's projected finish at PATH_TO_VICTORY_CONFIDENCE: their banked
+ * total plus a Monte Carlo draw of the rounds remaining. Each open round
+ * gets its own expected mean/std (`perRoundMean`/`perRoundStd`, from
+ * roundDrawStats — a knockout benchmark or the league's own stats) scaled by
+ * the target's skill ratio, mirroring simulateWinProbability's per-round
+ * draw exactly. Each trial draws one shared "skill" offset for the whole
+ * remaining stretch (a hot or cold patch persists across rounds) plus
+ * independent per-round noise, then the samples are sorted and the
+ * requested percentile read off.
+ */
+function projectFinishAtConfidence(params: {
+  banked: number;
+  perRoundMean: number[];
+  perRoundSkillSD: number[];
+  perRoundStd: number[];
+  seed: number;
+  confidence?: number;
+  pairs?: number;
+}): number {
+  const {
+    banked,
+    perRoundMean,
+    perRoundSkillSD,
+    perRoundStd,
+    seed,
+    confidence = PATH_TO_VICTORY_CONFIDENCE,
+    pairs = PAIRS,
+  } = params;
+  const roundsRemaining = perRoundMean.length;
+  const { randn } = createSeededRandom(seed);
+  const samples: number[] = [];
+  for (let t = 0; t < pairs; t++) {
+    const zSkill = randn();
+    const roundNoise: number[] = [];
+    for (let j = 0; j < roundsRemaining; j++) roundNoise.push(randn());
+    for (const sign of [1, -1]) {
+      let total = banked;
+      for (let j = 0; j < roundsRemaining; j++) {
+        const target = perRoundMean[j] + sign * zSkill * perRoundSkillSD[j];
+        const noise = sign * roundNoise[j];
+        total += clamp(target + noise * perRoundStd[j], SCORE_MIN, SCORE_MAX);
+      }
+      samples.push(total);
+    }
+  }
+  samples.sort((a, b) => a - b);
+  const idx = Math.min(samples.length - 1, Math.ceil(confidence * samples.length) - 1);
+  return samples[idx];
+}
+
+/**
+ * The per-round average a chaser needs to have a `confidence` chance of
+ * catching the target: the target's projected finish at that percentile
+ * (accounting for their own shrunk skill projection, the league's field
+ * size, and each remaining round's own expected variance) minus the
  * chaser's current total, spread over the rounds left.
  */
 function requiredAverageToCatch(params: {
-  target: { total: number; played: number[] };
+  targetId: string;
   chaserTotal: number;
-  roundsRemaining: number;
+  players: { id: string }[];
+  rounds: { id: string; locked: boolean; short?: string }[];
+  score: ScoreLookup;
 }): number {
-  const { target, chaserTotal, roundsRemaining } = params;
-  const average = target.played.length
-    ? target.played.reduce((a, b) => a + b, 0) / target.played.length
-    : 0;
-  const buffer = stdDev(target.played);
-  const projectedFinish = target.total + average * roundsRemaining + buffer;
+  const { targetId, chaserTotal, players, rounds, score } = params;
+  const openRounds = rounds.filter((r) => !r.locked);
+  const roundsRemaining = openRounds.length;
+  const leagueStats = computeLeagueStats(players, rounds, score);
+  const { projMean, skillSD } = projectPlayerSkill({
+    playerId: targetId,
+    rounds,
+    score,
+    leagueStats,
+  });
+  const banked = totalToDate(rounds, score, targetId);
+
+  const ratioBase = skillRatioBase(leagueStats);
+  const skillRatio = projMean / ratioBase;
+  const openRoundStats = openRounds.map((r) => roundDrawStats(r, leagueStats));
+  const perRoundMean = openRoundStats.map(({ mean }) => mean * skillRatio);
+  const perRoundSkillSD = openRoundStats.map(({ mean }) => skillSD * (mean / ratioBase));
+  const perRoundStd = openRoundStats.map(({ std }) => std);
+
+  const seed = deriveSeed([
+    banked,
+    projMean,
+    skillSD,
+    leagueStats.std,
+    roundsRemaining,
+    chaserTotal,
+  ]);
+  const projectedFinish = projectFinishAtConfidence({
+    banked,
+    perRoundMean,
+    perRoundSkillSD,
+    perRoundStd,
+    seed,
+  });
   return (projectedFinish - chaserTotal) / roundsRemaining;
 }
 
 /**
- * The per-round average a chasing player needs to catch the league leader —
- * or, when the subject is already leading, the buffer their nearest chaser
- * needs. Rounds remaining = unlocked rounds (locked rounds are banked into
- * each player's total). Suppressed (`no-rounds-left`) once every round is
- * locked.
+ * The per-round average a chasing player needs to have a 90% chance of
+ * catching the league leader — or, when the subject is already leading, the
+ * same-confidence buffer their nearest chaser needs. Rounds remaining =
+ * unlocked rounds (locked rounds are banked into each player's total).
+ * Suppressed (`no-rounds-left`) once every round is locked.
  */
 export function computePathToVictory(params: {
-  rounds: { id: string; locked: boolean }[];
+  players: { id: string }[];
+  rounds: { id: string; locked: boolean; short?: string }[];
   score: ScoreLookup;
   /** playerId -> league rank (1 = first); from computeStandings. */
   ranks: Map<string, number>;
   /** The player the widget is anchored to. */
   subjectId: string;
 }): PathToVictoryResult {
-  const { rounds, score, ranks, subjectId } = params;
+  const { players, rounds, score, ranks, subjectId } = params;
   const roundsRemaining = rounds.filter((r) => !r.locked).length;
   if (roundsRemaining === 0) return { status: "no-rounds-left" };
 
   const leaderId = [...ranks.entries()].find(([, r]) => r === 1)?.[0] ?? null;
   if (!leaderId) return { status: "no-rounds-left" };
 
-  const statsFor = (id: string) => {
-    const played = rounds
-      .map((r) => score(id, r.id))
-      .filter((v): v is number => typeof v === "number");
-    const total = played.reduce((a, b) => a + b, 0);
-    return { total, played };
-  };
+  const totalOf = (id: string) => totalToDate(rounds, score, id);
 
   if (subjectId === leaderId) {
     const chaserId = [...ranks.entries()].find(([, r]) => r === 2)?.[0] ?? null;
     if (!chaserId) return { status: "leading", requiredAverage: Infinity, chaserId: null };
     const requiredAverage = requiredAverageToCatch({
-      target: statsFor(subjectId),
-      chaserTotal: statsFor(chaserId).total,
-      roundsRemaining,
+      targetId: subjectId,
+      chaserTotal: totalOf(chaserId),
+      players,
+      rounds,
+      score,
     });
     return { status: "leading", requiredAverage, chaserId };
   }
 
   const requiredAverage = requiredAverageToCatch({
-    target: statsFor(leaderId),
-    chaserTotal: statsFor(subjectId).total,
-    roundsRemaining,
+    targetId: leaderId,
+    chaserTotal: totalOf(subjectId),
+    players,
+    rounds,
+    score,
   });
   return {
     status: "chasing",

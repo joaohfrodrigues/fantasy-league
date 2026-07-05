@@ -2363,7 +2363,7 @@ function PathToVictoryPanel({
 
   const ranks = useMemo(() => new Map(standings.map((r) => [r.player.id, r.rank])), [standings]);
   const roundsForCalc = useMemo(
-    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null })),
+    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null, short: r.short })),
     [rounds],
   );
   const playerById = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
@@ -2373,8 +2373,8 @@ function PathToVictoryPanel({
   );
 
   const result = useMemo(
-    () => computePathToVictory({ rounds: roundsForCalc, score, ranks, subjectId }),
-    [roundsForCalc, score, ranks, subjectId],
+    () => computePathToVictory({ players, rounds: roundsForCalc, score, ranks, subjectId }),
+    [players, roundsForCalc, score, ranks, subjectId],
   );
 
   if (roundsPlayedCount < PATH_TO_VICTORY_MIN_PLAYED) return null;

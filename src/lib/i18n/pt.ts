@@ -182,13 +182,13 @@ export const pt = {
 
     pathToVictory: "Caminho para a vitória",
     pathToVictorySubtitle:
-      "Uma projeção, não uma garantia — assume que o líder mantém a sua própria média.",
+      "Uma hipótese de 90%, não uma garantia — conta com as oscilações de pontuação da própria liga.",
     pathToVictoryPlayerLabel: "Jogador",
     pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para te apanhar.`,
+      `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de te apanhar.`,
     pathToVictoryLeadingSolo: "Ainda não há mais ninguém na liga para te perseguir.",
     pathToVictoryChasing: (name: string, avg: number) =>
-      `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para apanhar ${name}.`,
+      `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para teres 90% de hipóteses de apanhar ${name}.`,
     pathToVictoryImpossible: (name: string) =>
       `A diferença é grande demais para fechar — nem uma série perfeita chegaria para apanhar ${name}.`,
 

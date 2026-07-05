@@ -179,13 +179,13 @@ export const en: Dict = {
 
     pathToVictory: "Path to victory",
     pathToVictorySubtitle:
-      "A projection, not a guarantee — assumes the leader keeps pace with their own average.",
+      "A 90% chance, not a guarantee — accounts for the league's own scoring swings.",
     pathToVictoryPlayerLabel: "Player",
     pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} needs to average ${Math.round(avg)} pts/round to catch you.`,
+      `${name} needs to average ${Math.round(avg)} pts/round for a 90% chance of catching you.`,
     pathToVictoryLeadingSolo: "No one else in the league to chase you yet.",
     pathToVictoryChasing: (name: string, avg: number) =>
-      `Average ${Math.round(avg)} pts/round over the rounds left to catch ${name}.`,
+      `Average ${Math.round(avg)} pts/round over the rounds left for a 90% chance of catching ${name}.`,
     pathToVictoryImpossible: (name: string) =>
       `The gap is too big to close — even a flawless run wouldn't catch ${name}.`,
 
