@@ -2,6 +2,7 @@
 // couple of size options, this builds the ordered list of rounds (localized name +
 // short code) used when creating a league. Client-safe: no server-only imports.
 import type { Dict } from "@/lib/i18n";
+import { clamp } from "@/lib/utils";
 
 export type TemplateId = "worldCup" | "championsLeague" | "league" | "knockout";
 
@@ -26,7 +27,7 @@ export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
 
 function clampInt(value: number, min: number, max: number): number {
   const n = Math.floor(Number.isFinite(value) ? value : min);
-  return Math.min(max, Math.max(min, n));
+  return clamp(n, min, max);
 }
 
 /** Knockout ladder from the largest stage down to the final. */

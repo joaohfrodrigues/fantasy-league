@@ -8,6 +8,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Json } from "@/integrations/supabase/types";
 import { TIEBREAKS } from "@/lib/standings";
+import { clamp } from "@/lib/utils";
 
 const MAX_NAME = 80;
 const MAX_SHORT = 8;
@@ -1161,7 +1162,7 @@ function parseScores(
     const key = `${player}:${round}`;
     if (seen.has(key)) throw new Error("INVALID_SNAPSHOT");
     seen.add(key);
-    const clamped = Math.max(POINTS_MIN, Math.min(POINTS_MAX, Math.trunc(points)));
+    const clamped = clamp(Math.trunc(points), POINTS_MIN, POINTS_MAX);
     scores.push({ player, round, points: clamped });
   }
   return scores;

@@ -11,7 +11,7 @@ import {
   SURFACE,
   ACCENT,
 } from "./og-image.server";
-import { computeRoundMaxes } from "./standings";
+import { computeRoundMaxes, type ScoreRow } from "./standings";
 import { computeRecordMetrics } from "./badges";
 import { toSimRound } from "./simulation";
 import { computeLiveMetrics } from "./league-metrics";
@@ -135,8 +135,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
     const { data: scores } = roundIds.length
       ? await db.from("scores").select("player_id, round_id, points").in("round_id", roundIds)
       : { data: [] };
-    type PS = { player_id: string; round_id: string; points: number };
-    const scoreList = (scores ?? []) as PS[];
+    const scoreList = (scores ?? []) as ScoreRow[];
     const targetRound = roundList.find((r) => r.id === roundId);
     if (!targetRound) return new Response("Round not found", { status: 404 });
 

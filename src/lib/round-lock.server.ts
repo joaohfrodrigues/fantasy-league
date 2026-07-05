@@ -6,7 +6,7 @@
 // throws (see setRoundLock's try/catch in leagues.functions.ts, which is the
 // one place responsible for "a banter failure must never block the lock").
 import type { AdminClient, PlayerRow } from "./leagues.functions";
-import { computeRoundMaxes } from "./standings";
+import { computeRoundMaxes, type ScoreRow } from "./standings";
 import { computeLiveMetrics } from "./league-metrics";
 import { computeRecordMetrics } from "./badges";
 import { toSimRound } from "./simulation";
@@ -21,8 +21,6 @@ type RoundRow = {
   summary_en: string | null;
   banter_devices: string[] | null;
 };
-type ScoreRow = { player_id: string; round_id: string; points: number };
-
 /**
  * Recompute standings/win-probability/badges for `roundId`'s league, generate
  * its banter, and persist it to the round row. Lets errors propagate — the

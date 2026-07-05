@@ -24,6 +24,9 @@ export function compareRank(a: RankMetrics, b: RankMetrics, mode: TiebreakMode):
 
 export type ScoreLookup = (playerId: string, roundId: string) => number | undefined;
 
+// Raw `scores` table row shape, as selected by round-lock and OG-image queries.
+export type ScoreRow = { player_id: string; round_id: string; points: number };
+
 /** Highest score in each round (a Round win goes to whoever holds it). */
 export function computeRoundMaxes(
   players: { id: string }[],
