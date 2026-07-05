@@ -11,9 +11,10 @@ import {
   SURFACE,
   ACCENT,
 } from "./og-image.server";
-import { computeStandings, computeRoundMaxes } from "./standings";
-import { assignBadges } from "./badges";
-import { simulateWinProbability, toSimRound } from "./simulation";
+import { computeRoundMaxes } from "./standings";
+import { computeRecordMetrics } from "./badges";
+import { toSimRound } from "./simulation";
+import { computeLiveMetrics } from "./league-metrics";
 import type { PlayerRow } from "./leagues.functions";
 
 export async function handleOgRequest(pathname: string): Promise<Response | null> {
@@ -144,19 +145,12 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
       scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
     const roundsWithLock = roundList.map(toSimRound);
     const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
-    const winProbability = simulateWinProbability({
+    const { standings: standingRows } = computeLiveMetrics({
       players: playerList,
       rounds: roundsWithLock,
       score: scoreOf,
-      pairs: 500,
-    });
-    const standingRows = computeStandings({
-      players: playerList,
-      rounds: roundList,
-      score: scoreOf,
-      winProbability,
       tiebreak,
-      roundMaxes,
+      pairs: 500,
     });
     const roundMax = roundMaxes.get(roundId);
     const roundWinnerPlayer =
@@ -187,7 +181,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
       )[0]?.player.name;
       const postRoundLeader = standingRows.find((r) => r.rank === 1)?.player.name;
       const leaderChanged = !!preRoundLeader && preRoundLeader !== postRoundLeader;
-      const badges = assignBadges({
+      const { badges } = computeRecordMetrics({
         players: playerList,
         rounds: roundsWithLock,
         score: scoreOf,

@@ -108,7 +108,9 @@ async function getClientIp(): Promise<string> {
   }
 }
 
-type AdminClient = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
+export type AdminClient = Awaited<
+  typeof import("@/integrations/supabase/client.server")
+>["supabaseAdmin"];
 
 type AuditSnapshot = {
   id: string;
@@ -877,177 +879,23 @@ async function setRoundLock(
   });
 
   if (lock) {
-    // Generate and store the round summary. Never fails the lock action.
+    // Recompute this league's metrics and generate the round's banter. Never
+    // fails the lock action — see onRoundLocked (src/lib/round-lock.server.ts)
+    // for what actually happens on lock.
     try {
-      await generateRoundSummary(admin, leagueId, roundId);
+      const { onRoundLocked } = await import("./round-lock.server");
+      const result = await onRoundLocked(admin, leagueId, roundId);
+      if (result) {
+        console.log(
+          `[banter] round ${roundId} (league ${leagueId}): ${result.usedAi ? "AI (Gemini)" : "templated fallback"}`,
+        );
+      }
     } catch (err) {
       console.error("[leagues] round summary generation failed:", err);
     }
   }
 
   return { ok: true };
-}
-
-async function generateRoundSummary(
-  admin: AdminClient,
-  leagueId: string,
-  roundId: string,
-): Promise<void> {
-  const [{ data: lg }, { data: rounds }, { data: players }] = await Promise.all([
-    admin.from("leagues").select("id, name, tiebreak").eq("id", leagueId).maybeSingle(),
-    admin
-      .from("rounds")
-      .select("id, name, short, locked_at, display_order, summary_en, banter_devices")
-      .eq("league_id", leagueId)
-      .order("display_order"),
-    admin
-      .from("players")
-      .select("id, name, display_order, round_prize")
-      .eq("league_id", leagueId)
-      .order("display_order"),
-  ]);
-  if (!lg || !rounds?.length || !players?.length) return;
-
-  type PR = {
-    id: string;
-    name: string;
-    short: string;
-    locked_at: string | null;
-    display_order: number;
-    summary_en: string | null;
-    banter_devices: string[] | null;
-  };
-  type PS = { player_id: string; round_id: string; points: number };
-
-  const roundList = rounds as unknown as PR[];
-  const roundIds = roundList.map((r) => r.id);
-  const { data: scores } = await admin
-    .from("scores")
-    .select("player_id, round_id, points")
-    .in("round_id", roundIds);
-  const playerList = players as unknown as PlayerRow[];
-  const scoreList = (scores ?? []) as PS[];
-  const targetRound = roundList.find((r) => r.id === roundId);
-  if (!targetRound) return;
-
-  const scoreOf = (pid: string, rid: string) =>
-    scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
-  const { computeStandings, computeRoundMaxes } = await import("./standings");
-  const { simulateWinProbability, toSimRound } = await import("./simulation");
-  const roundsWithLock = roundList.map(toSimRound);
-  const { assignBadges } = await import("./badges");
-  const { getBanter, templatedBanter } = await import("./banter.server");
-
-  const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
-  const winProbability = simulateWinProbability({
-    players: playerList,
-    rounds: roundsWithLock,
-    score: scoreOf,
-    pairs: 500,
-  });
-  const tiebreak = (lg.tiebreak as "total" | "wins" | "latest") ?? "total";
-  const standingRows = computeStandings({
-    players: playerList,
-    rounds: roundList,
-    score: scoreOf,
-    winProbability,
-    tiebreak,
-    roundMaxes,
-  });
-  const badges = assignBadges({
-    players: playerList,
-    rounds: roundsWithLock,
-    score: scoreOf,
-    tiebreak,
-  });
-
-  const roundMax = roundMaxes.get(roundId);
-  const roundWinnerPlayer =
-    roundMax !== undefined ? playerList.find((p) => scoreOf(p.id, roundId) === roundMax) : null;
-  const roundWinner = roundWinnerPlayer?.name ?? null;
-  const roundPrize = roundWinnerPlayer?.round_prize ?? null;
-  const roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
-
-  // Build round history for context (all played rounds up to and including this one)
-  const playedRounds = roundList.filter((r) => roundMaxes.has(r.id));
-  const recentRounds = playedRounds.map((r) => {
-    const max = roundMaxes.get(r.id);
-    const winner =
-      max !== undefined
-        ? (playerList.find((p) => scoreOf(p.id, r.id) === max)?.name ?? null)
-        : null;
-    return { roundName: r.name, winner };
-  });
-
-  const upcomingRounds = roundList.filter((r) => !roundMaxes.has(r.id)).map((r) => r.name);
-
-  // Prior generated banter, for steering the AI away from repeating recent jokes/themes.
-  const priorPlayedRounds = playedRounds.filter((r) => r.id !== roundId);
-  const priorSummaries = priorPlayedRounds
-    .slice(-3)
-    .map((r) => r.summary_en)
-    .filter((s): s is string => !!s);
-  const priorDevices = [
-    ...new Set(priorPlayedRounds.slice(-10).flatMap((r) => r.banter_devices ?? [])),
-  ];
-
-  // Detect leader change: compare pre-round leader (by total excluding this round) vs post-round
-  const preRoundLeader = [...standingRows].sort(
-    (a, b) =>
-      b.agg - (scoreOf(b.player.id, roundId) ?? 0) - (a.agg - (scoreOf(a.player.id, roundId) ?? 0)),
-  )[0]?.player.name;
-  const postRoundLeader = standingRows.find((r) => r.rank === 1)?.player.name;
-  const leaderChanged = !!preRoundLeader && preRoundLeader !== postRoundLeader;
-
-  const input = {
-    leagueId: lg.id,
-    roundId,
-    leagueName: lg.name,
-    roundName: targetRound.name,
-    roundWinner,
-    roundPrize,
-    standings: standingRows
-      .sort((a, b) => a.rank - b.rank)
-      .map((r) => ({
-        name: r.player.name,
-        total: r.agg,
-        rank: r.rank,
-        prob: r.prob,
-        wins: r.wins,
-        roundScore: scoreOf(r.player.id, roundId) ?? null,
-      })),
-    recentRounds,
-    upcomingRounds,
-    badges: playerList.map((p) => ({ player: p.name, badges: badges.get(p.id) ?? [] })),
-    roundsPlayed,
-    totalRounds: roundList.length,
-    leaderChanged,
-    priorSummaries,
-    priorDevices,
-  };
-
-  const { en, pt, ai, devices } = await getBanter(input).catch(() => ({
-    en: templatedBanter(input, "en"),
-    pt: templatedBanter(input, "pt"),
-    ai: false,
-    devices: [] as string[],
-  }));
-  console.log(
-    `[banter] round "${targetRound.name}" (league ${lg.name}): ${ai ? "AI (Gemini)" : "templated fallback"}`,
-  );
-  // Bypass strict Supabase schema types until migration is applied and types regenerated.
-  type RoundsSummaryUpdate = {
-    update(d: {
-      summary_en: string | null;
-      summary_pt: string | null;
-      banter_devices: string[] | null;
-    }): {
-      eq(col: string, val: string): Promise<unknown>;
-    };
-  };
-  await (admin.from("rounds") as unknown as RoundsSummaryUpdate)
-    .update({ summary_en: en, summary_pt: pt, banter_devices: devices.length ? devices : null })
-    .eq("id", roundId);
 }
 
 export const lockRound = createServerFn({ method: "POST" })

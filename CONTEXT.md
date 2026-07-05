@@ -105,6 +105,15 @@ probability recompute from it. The input mechanism may change over time (e.g. a
 slider) but the concept does not.
 _Avoid_: scenario, hypothetical, projection.
 
+**Alternative Reality**:
+A "change the past" exploration mode: the user excludes chosen played (locked)
+rounds from the standings recompute, to see how much those rounds mattered.
+Distinct from [[What-if]], which projects hypothetical _future_ rounds forward
+— Alternative Reality retroactively removes _real, already-played_ rounds
+instead. Like What-if, it is never persisted and never affects Badge or Round
+prize tallies (those are record metrics: locked rounds only, saved scores only).
+_Avoid_: what-if (a separate concept), rewrite history.
+
 ### History
 
 **Audit log**:

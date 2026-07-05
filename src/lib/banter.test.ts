@@ -345,6 +345,34 @@ describe("getBanter", () => {
     expect(body.generationConfig.responseSchema.properties).toHaveProperty("devices");
   });
 
+  it("propagates an injected Gemini caller's rejection (getBanter itself never swallows errors)", async () => {
+    const failingCaller = vi.fn().mockRejectedValue(new Error("network down"));
+    await expect(getBanter(base, failingCaller)).rejects.toThrow("network down");
+  });
+
+  it("returns ai:true using an injected Gemini caller, bypassing fetch entirely", async () => {
+    const fakeCaller = vi.fn().mockResolvedValue({
+      en: "Injected take.",
+      pt: "Análise injetada.",
+      devices: ["prize-mention"],
+    });
+    const result = await getBanter(base, fakeCaller);
+    expect(fakeCaller).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      en: "Injected take.",
+      pt: "Análise injetada.",
+      ai: true,
+      devices: ["prize-mention"],
+    });
+  });
+
+  it("falls back to templated using an injected Gemini caller that resolves null", async () => {
+    const fakeCaller = vi.fn().mockResolvedValue(null);
+    const result = await getBanter(base, fakeCaller);
+    expect(result.ai).toBe(false);
+    expect(result.en.length).toBeGreaterThan(0);
+  });
+
   it("includes prior summaries and devices in the Gemini prompt when present", async () => {
     vi.stubEnv("GOOGLE_AI_API_KEY", "test-key");
     const mockFetch = vi.fn().mockResolvedValue({

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assignBadges } from "./badges";
+import { assignBadges, computeRecordMetrics } from "./badges";
 import type { ScoreLookup } from "./standings";
 
 const P = (id: string) => ({ id });
@@ -104,5 +104,54 @@ describe("assignBadges", () => {
       tiebreak: "total",
     });
     expect(open.get("p1")).toEqual([]);
+  });
+});
+
+describe("computeRecordMetrics", () => {
+  it("tallies locked-round wins per player alongside badges", () => {
+    const score = lookup({
+      "p1:r1": 50,
+      "p2:r1": 40,
+      "p1:r2": 30,
+      "p2:r2": 60,
+    });
+    const { lockedWins } = computeRecordMetrics({
+      players: [P("p1"), P("p2")],
+      rounds,
+      score,
+      tiebreak: "total",
+    });
+    expect(lockedWins.get("p1")).toBe(1);
+    expect(lockedWins.get("p2")).toBe(1);
+  });
+
+  it("only counts locked rounds toward the win tally", () => {
+    const score = lookup({ "p1:r1": 50, "p2:r1": 40 });
+    const { lockedWins } = computeRecordMetrics({
+      players: [P("p1"), P("p2")],
+      rounds: [
+        { id: "r1", locked: true },
+        { id: "r2", locked: false },
+      ],
+      score,
+      tiebreak: "total",
+    });
+    expect(lockedWins.get("p1")).toBe(1);
+    expect(lockedWins.get("p2")).toBe(0);
+  });
+
+  it("returns the same badges assignBadges would produce standalone", () => {
+    const score = lookup({
+      "p1:r1": 50,
+      "p2:r1": 40,
+      "p3:r1": 10,
+      "p1:r2": 50,
+      "p2:r2": 40,
+      "p3:r2": 10,
+    });
+    const players = [P("p1"), P("p2"), P("p3")];
+    const direct = assignBadges({ players, rounds, score, tiebreak: "total" });
+    const { badges } = computeRecordMetrics({ players, rounds, score, tiebreak: "total" });
+    expect(badges).toEqual(direct);
   });
 });
