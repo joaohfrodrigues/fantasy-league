@@ -178,8 +178,7 @@ export const en: Dict = {
     moreActionsLocked: "Unlock to access more actions.",
 
     pathToVictory: "Path to victory",
-    pathToVictorySubtitle:
-      "A 90% chance, not a guarantee — accounts for the league's own scoring swings.",
+    pathToVictorySubtitle: "A projection, not a guarantee.",
     pathToVictoryPlayerLabel: "Player",
     pathToVictoryLeading: (name: string, avg: number) =>
       `${name} needs to average ${Math.round(avg)} pts/round for a 90% chance of catching you.`,
@@ -188,6 +187,17 @@ export const en: Dict = {
       `Average ${Math.round(avg)} pts/round over the rounds left for a 90% chance of catching ${name}.`,
     pathToVictoryImpossible: (name: string) =>
       `The gap is too big to close — even a flawless run wouldn't catch ${name}.`,
+    pathToVictoryInfoTitle: "How it's calculated",
+    pathToVictoryInfoSubtitle: "Why 90%, not a guarantee",
+    pathToVictoryInfoBody1bold: "Simulated, not guessed:",
+    pathToVictoryInfoBody1:
+      "we run thousands of simulated versions of the rest of the season, using your league's own scoring history — how many players there are and how much scores swing round to round.",
+    pathToVictoryInfoBody2bold: "The 90% target:",
+    pathToVictoryInfoBody2:
+      "the average shown would have been enough to catch the leader in 9 out of 10 of those simulations — a safety margin, not their most likely finish.",
+    pathToVictoryInfoBody3bold: "Bigger or wilder leagues need more:",
+    pathToVictoryInfoBody3:
+      "a large, unpredictable field widens the number; a small, steady one narrows it.",
 
     altReality: "Change the past",
     altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",

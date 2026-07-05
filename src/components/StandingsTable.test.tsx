@@ -116,6 +116,42 @@ describe("StandingsTable", () => {
     expect(queryByText("No players yet.")).not.toBeNull();
   });
 
+  it("renders an edit-round shortcut per round header only when onEditRound is given", () => {
+    const { container, rerender } = render(
+      <StandingsTable columns={makeColumns()} rows={makeRows()} labels={labels} />,
+    );
+    expect(container.querySelectorAll("thead th button")).toHaveLength(0);
+
+    const onEditRound = () => {};
+    rerender(
+      <StandingsTable
+        columns={makeColumns()}
+        rows={makeRows()}
+        labels={labels}
+        onEditRound={onEditRound}
+        editRoundTitle={(id) => `Edit ${id}`}
+      />,
+    );
+    const editButtons = container.querySelectorAll("thead th button");
+    expect(editButtons).toHaveLength(4);
+    expect(editButtons[0].getAttribute("title")).toBe("Edit r1");
+  });
+
+  it("calls onEditRound with the column id when its edit shortcut is clicked", () => {
+    const clicked: string[] = [];
+    const { getByTitle } = render(
+      <StandingsTable
+        columns={makeColumns()}
+        rows={makeRows()}
+        labels={labels}
+        onEditRound={(id) => clicked.push(id)}
+        editRoundTitle={(id) => `Edit ${id}`}
+      />,
+    );
+    getByTitle("Edit r3").click();
+    expect(clicked).toEqual(["r3"]);
+  });
+
   it("matches the static (example-style) rendering snapshot", () => {
     const { container } = render(
       <StandingsTable columns={makeColumns()} rows={makeRows()} labels={labels} />,

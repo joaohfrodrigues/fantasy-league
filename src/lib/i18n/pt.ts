@@ -181,8 +181,7 @@ export const pt = {
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
     pathToVictory: "Caminho para a vitória",
-    pathToVictorySubtitle:
-      "Uma hipótese de 90%, não uma garantia — conta com as oscilações de pontuação da própria liga.",
+    pathToVictorySubtitle: "Uma projeção, não uma garantia.",
     pathToVictoryPlayerLabel: "Jogador",
     pathToVictoryLeading: (name: string, avg: number) =>
       `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de te apanhar.`,
@@ -191,6 +190,17 @@ export const pt = {
       `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para teres 90% de hipóteses de apanhar ${name}.`,
     pathToVictoryImpossible: (name: string) =>
       `A diferença é grande demais para fechar — nem uma série perfeita chegaria para apanhar ${name}.`,
+    pathToVictoryInfoTitle: "Como é calculado",
+    pathToVictoryInfoSubtitle: "Porquê 90%, e não uma garantia",
+    pathToVictoryInfoBody1bold: "Simulado, não adivinhado:",
+    pathToVictoryInfoBody1:
+      "corremos milhares de versões simuladas do resto da época, usando o histórico de pontuação da tua liga — quantos jogadores há e o quanto as pontuações oscilam de ronda para ronda.",
+    pathToVictoryInfoBody2bold: "O objetivo de 90%:",
+    pathToVictoryInfoBody2:
+      "a média apresentada teria sido suficiente para apanhar o líder em 9 de cada 10 dessas simulações — uma margem de segurança, não o resultado mais provável.",
+    pathToVictoryInfoBody3bold: "Ligas maiores ou mais imprevisíveis exigem mais:",
+    pathToVictoryInfoBody3:
+      "um grupo grande e imprevisível aumenta o número; um grupo pequeno e estável reduz-o.",
 
     altReality: "Muda o passado",
     altRealityTitle: "Excluir rondas já jogadas da classificação para ver o quanto contaram",

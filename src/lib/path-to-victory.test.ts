@@ -210,12 +210,17 @@ describe("computePathToVictory", () => {
     expect(result.requiredAverage).toBeCloseTo(79.45, 1);
   });
 
-  it("uses a knockout round's own tighter benchmark instead of the league's wider observed volatility", () => {
-    // Mirrors simulation.test.ts's "knockout-round benchmark is tighter" case:
-    // a locked-round gap with wide observed variance makes the league-derived
-    // fallback std wide, but a Final round's benchmark std (20) is far
-    // tighter, so the required average shouldn't inflate as much.
-    const twoPlayers = [{ id: "a" }, { id: "b" }];
+  it("stays anchored to the league's own observed scoring level for a high-scoring league, regardless of round naming", () => {
+    // Regression guard: an earlier version pulled the remaining-round
+    // projection toward simulation.ts's fixed Champions-League-knockout
+    // benchmarks (e.g. a "Final" round's mean of 44) whenever a round's
+    // `short` label matched one. For a league that actually scores far
+    // above those fixed values (as this one does — group-stage rounds in
+    // the 80-120 range), that produced a required average that didn't
+    // square with the league's own standings. The target's projection must
+    // track the league's own observed mean/std, not a fixed external prior,
+    // no matter what a round is named.
+    const highScoringPlayers = [{ id: "a" }, { id: "b" }];
     const locked = [
       { id: "r1", locked: true },
       { id: "r2", locked: true },
@@ -233,24 +238,21 @@ describe("computePathToVictory", () => {
       ["a", 1],
       ["b", 2],
     ]);
-    const genericRound = computePathToVictory({
-      players: twoPlayers,
+    const unnamedRound = computePathToVictory({
+      players: highScoringPlayers,
       rounds: [...locked, { id: "r4", locked: false }],
       score,
       ranks,
       subjectId: "b",
     });
     const finalRound = computePathToVictory({
-      players: twoPlayers,
-      rounds: [...locked, { id: "r4", locked: false, short: "F" }],
+      players: highScoringPlayers,
+      rounds: [...locked, { id: "r4", locked: false, short: "F" } as (typeof locked)[number]],
       score,
       ranks,
       subjectId: "b",
     });
-    if (genericRound.status !== "chasing" || finalRound.status !== "chasing") {
-      throw new Error("expected chasing");
-    }
-    expect(finalRound.requiredAverage).toBeLessThan(genericRound.requiredAverage);
+    expect(finalRound).toEqual(unnamedRound);
   });
 
   it("produces a sensible, non-degenerate result for a 2-player (head-to-head) league", () => {

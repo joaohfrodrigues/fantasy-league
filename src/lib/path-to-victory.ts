@@ -3,22 +3,28 @@
 // actionable per-round average out — hides the projection math behind a
 // single question: "what does this player need to average to have a 90%
 // chance of catching the leader?" Reuses simulation.ts's league-wide
-// mean/std, shrinkage, and per-round (knockout-benchmark-aware) draw stats
-// — see computeLeagueStats, projectPlayerSkill, roundDrawStats — so a
-// bigger or more volatile field, and a tighter Final-round variance, widen
-// or narrow the answer the same way they do Win probability. It then runs
-// its own small Monte Carlo over just the target's remaining rounds — no
-// new simulation engine, just simulation.ts's existing building blocks
-// aimed at one player instead of a multi-player race (issue #21: "no new
-// simulation infrastructure").
+// mean/std and shrinkage (see computeLeagueStats, projectPlayerSkill) so a
+// bigger or more volatile field widens the answer, then runs its own small
+// Monte Carlo over the target's remaining rounds — no new simulation
+// engine, just simulation.ts's existing building blocks aimed at one player
+// instead of a multi-player race (issue #21: "no new simulation
+// infrastructure").
+//
+// Deliberately does NOT use simulation.ts's ROUND_BENCHMARKS (via
+// roundDrawStats): those are Champions-League-knockout-calibrated absolute
+// mean/std values, and this app targets any soccer fantasy league — for a
+// league whose own scoring runs well above (or below) those fixed numbers,
+// projecting every remaining round toward them understates the target's
+// realistic finish and produces a required average that visibly doesn't
+// square with current standings. Every remaining round instead draws from
+// the league's own observed mean/std, which stays anchored to what this
+// specific league has actually shown so far.
 
 import {
   SCORE_MIN,
   SCORE_MAX,
   computeLeagueStats,
   projectPlayerSkill,
-  roundDrawStats,
-  skillRatioBase,
   createSeededRandom,
   type ScoreLookup,
 } from "./simulation";
@@ -63,34 +69,32 @@ function totalToDate(rounds: { id: string }[], score: ScoreLookup, playerId: str
 
 /**
  * The target's projected finish at PATH_TO_VICTORY_CONFIDENCE: their banked
- * total plus a Monte Carlo draw of the rounds remaining. Each open round
- * gets its own expected mean/std (`perRoundMean`/`perRoundStd`, from
- * roundDrawStats — a knockout benchmark or the league's own stats) scaled by
- * the target's skill ratio, mirroring simulateWinProbability's per-round
- * draw exactly. Each trial draws one shared "skill" offset for the whole
- * remaining stretch (a hot or cold patch persists across rounds) plus
- * independent per-round noise, then the samples are sorted and the
- * requested percentile read off.
+ * total plus a Monte Carlo draw of the rounds remaining, using the league's
+ * own observed mean/std for every remaining round. Each trial draws one
+ * shared "skill" offset for the whole remaining stretch (a hot or cold
+ * patch persists across rounds) plus independent per-round noise, then the
+ * samples are sorted and the requested percentile read off.
  */
 function projectFinishAtConfidence(params: {
   banked: number;
-  perRoundMean: number[];
-  perRoundSkillSD: number[];
-  perRoundStd: number[];
+  projMean: number;
+  skillSD: number;
+  roundStd: number;
+  roundsRemaining: number;
   seed: number;
   confidence?: number;
   pairs?: number;
 }): number {
   const {
     banked,
-    perRoundMean,
-    perRoundSkillSD,
-    perRoundStd,
+    projMean,
+    skillSD,
+    roundStd,
+    roundsRemaining,
     seed,
     confidence = PATH_TO_VICTORY_CONFIDENCE,
     pairs = PAIRS,
   } = params;
-  const roundsRemaining = perRoundMean.length;
   const { randn } = createSeededRandom(seed);
   const samples: number[] = [];
   for (let t = 0; t < pairs; t++) {
@@ -99,10 +103,10 @@ function projectFinishAtConfidence(params: {
     for (let j = 0; j < roundsRemaining; j++) roundNoise.push(randn());
     for (const sign of [1, -1]) {
       let total = banked;
+      const skillOffset = sign * zSkill * skillSD;
       for (let j = 0; j < roundsRemaining; j++) {
-        const target = perRoundMean[j] + sign * zSkill * perRoundSkillSD[j];
         const noise = sign * roundNoise[j];
-        total += clamp(target + noise * perRoundStd[j], SCORE_MIN, SCORE_MAX);
+        total += clamp(projMean + skillOffset + noise * roundStd, SCORE_MIN, SCORE_MAX);
       }
       samples.push(total);
     }
@@ -115,20 +119,19 @@ function projectFinishAtConfidence(params: {
 /**
  * The per-round average a chaser needs to have a `confidence` chance of
  * catching the target: the target's projected finish at that percentile
- * (accounting for their own shrunk skill projection, the league's field
- * size, and each remaining round's own expected variance) minus the
- * chaser's current total, spread over the rounds left.
+ * (accounting for their own shrunk skill projection and the league's field
+ * size and round-to-round volatility) minus the chaser's current total,
+ * spread over the rounds left.
  */
 function requiredAverageToCatch(params: {
   targetId: string;
   chaserTotal: number;
   players: { id: string }[];
-  rounds: { id: string; locked: boolean; short?: string }[];
+  rounds: { id: string; locked: boolean }[];
   score: ScoreLookup;
 }): number {
   const { targetId, chaserTotal, players, rounds, score } = params;
-  const openRounds = rounds.filter((r) => !r.locked);
-  const roundsRemaining = openRounds.length;
+  const roundsRemaining = rounds.filter((r) => !r.locked).length;
   const leagueStats = computeLeagueStats(players, rounds, score);
   const { projMean, skillSD } = projectPlayerSkill({
     playerId: targetId,
@@ -137,13 +140,6 @@ function requiredAverageToCatch(params: {
     leagueStats,
   });
   const banked = totalToDate(rounds, score, targetId);
-
-  const ratioBase = skillRatioBase(leagueStats);
-  const skillRatio = projMean / ratioBase;
-  const openRoundStats = openRounds.map((r) => roundDrawStats(r, leagueStats));
-  const perRoundMean = openRoundStats.map(({ mean }) => mean * skillRatio);
-  const perRoundSkillSD = openRoundStats.map(({ mean }) => skillSD * (mean / ratioBase));
-  const perRoundStd = openRoundStats.map(({ std }) => std);
 
   const seed = deriveSeed([
     banked,
@@ -155,9 +151,10 @@ function requiredAverageToCatch(params: {
   ]);
   const projectedFinish = projectFinishAtConfidence({
     banked,
-    perRoundMean,
-    perRoundSkillSD,
-    perRoundStd,
+    projMean,
+    skillSD,
+    roundStd: leagueStats.std,
+    roundsRemaining,
     seed,
   });
   return (projectedFinish - chaserTotal) / roundsRemaining;
@@ -172,7 +169,7 @@ function requiredAverageToCatch(params: {
  */
 export function computePathToVictory(params: {
   players: { id: string }[];
-  rounds: { id: string; locked: boolean; short?: string }[];
+  rounds: { id: string; locked: boolean }[];
   score: ScoreLookup;
   /** playerId -> league rank (1 = first); from computeStandings. */
   ranks: Map<string, number>;

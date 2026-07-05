@@ -889,68 +889,68 @@ function LeagueBoard() {
             </div>
           </Link>
 
-          {/* Desktop action row — hidden on mobile */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Desktop action row — hidden on mobile. Grouped so the language
+              toggle, content-editing shortcuts, and the lock/unlock control
+              read as three distinct clusters instead of one flat icon row. */}
+          <div className="hidden md:flex items-center gap-3">
             <LanguageToggle />
             {unlocked && (
-              <button
-                onClick={() => setEditingLeagueName(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.editLeagueName}
-                aria-label={t.board.editLeagueName}
-              >
-                <Pencil className="size-3.5" />
-              </button>
+              <div className="flex items-center gap-2 pl-3 border-l border-border/60">
+                <button
+                  onClick={() => setEditingLeagueName(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.editLeagueName}
+                  aria-label={t.board.editLeagueName}
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  onClick={() => setAddingPlayer(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.addPlayer}
+                  aria-label={t.board.addPlayer}
+                >
+                  <UserPlus className="size-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowHistory(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.historyTitle}
+                  aria-label={t.board.history}
+                >
+                  <History className="size-3.5" />
+                </button>
+                <button
+                  onClick={exportData}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.exportTitle}
+                  aria-label={t.board.exportData}
+                >
+                  <Download className="size-3.5" />
+                </button>
+              </div>
             )}
-            {unlocked && (
-              <button
-                onClick={() => setAddingPlayer(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.addPlayer}
-                aria-label={t.board.addPlayer}
-              >
-                <UserPlus className="size-3.5" />
-              </button>
-            )}
-            {unlocked && (
-              <button
-                onClick={() => setShowHistory(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.historyTitle}
-                aria-label={t.board.history}
-              >
-                <History className="size-3.5" />
-              </button>
-            )}
-            {unlocked && (
-              <button
-                onClick={exportData}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.exportTitle}
-                aria-label={t.board.exportData}
-              >
-                <Download className="size-3.5" />
-              </button>
-            )}
-            {unlocked ? (
-              <button
-                onClick={lock}
-                className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-pitch/15 text-pitch hover:bg-pitch/25 transition-colors"
-                title={t.board.lockTitle}
-              >
-                <Unlock className="size-3.5" />
-                {t.board.editingActive}
-              </button>
-            ) : (
-              <button
-                onClick={() => setAskPassword(true)}
-                className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.unlockTitle}
-              >
-                <Lock className="size-3.5" />
-                {t.board.editScores}
-              </button>
-            )}
+            <div className="pl-3 border-l border-border/60">
+              {unlocked ? (
+                <button
+                  onClick={lock}
+                  className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-pitch/15 text-pitch hover:bg-pitch/25 transition-colors"
+                  title={t.board.lockTitle}
+                >
+                  <Unlock className="size-3.5" />
+                  {t.board.editingActive}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setAskPassword(true)}
+                  className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.unlockTitle}
+                >
+                  <Lock className="size-3.5" />
+                  {t.board.editScores}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Mobile action row — hidden on desktop */}
@@ -1236,24 +1236,9 @@ function LeagueBoard() {
             </div>
             {unlocked && (
               <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                {rounds.map((r) => {
-                  const played = roundsPlayedIds.includes(r.id);
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => setEditing(r.id)}
-                      className={`hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-                        played
-                          ? "bg-pitch/15 text-pitch hover:bg-pitch/25"
-                          : "bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
-                      }`}
-                      title={t.board.roundButtonTitle(played, r.name)}
-                    >
-                      {r.locked_at ? <Lock className="size-3" /> : <Pencil className="size-3" />}
-                      {r.short}
-                    </button>
-                  );
-                })}
+                {/* Per-round editing now lives on the table's own round
+                    headers (see onEditRound below) — a separate row of
+                    round-short buttons here just duplicated those labels. */}
                 <button
                   onClick={openCreateRound}
                   className="hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -1322,6 +1307,13 @@ function LeagueBoard() {
             rows={standingsRows}
             sort={{ key: sortKey, dir: sortDir, onSortBy: sortBy }}
             dinnerHeaderExtra={<WinOddsInfo />}
+            onEditRound={unlocked ? setEditing : undefined}
+            editRoundTitle={(roundId) =>
+              t.board.roundButtonTitle(
+                roundsPlayedIds.includes(roundId),
+                rounds.find((r) => r.id === roundId)?.name ?? "",
+              )
+            }
             emptyState={
               unlocked ? (
                 <button
@@ -2338,6 +2330,90 @@ function H2HModal({
   );
 }
 
+function PathToVictoryInfo() {
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const t = useT();
+
+  const panelBody = (
+    <>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
+        <span className="grid place-items-center size-7 rounded-lg bg-emerald-500/15 text-emerald-400">
+          <Target className="size-3.5" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
+            {t.board.pathToVictoryInfoTitle}
+          </p>
+          <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
+            {t.board.pathToVictoryInfoSubtitle}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-4 py-3 space-y-2.5">
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody1bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody1}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody2bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody2}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody3bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody3}
+        </p>
+      </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+            aria-label={t.board.pathToVictoryInfoTitle}
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        </DrawerTrigger>
+        <DrawerContent className="text-left overflow-hidden">
+          <div className="pb-6">{panelBody}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <span className="relative inline-flex normal-case">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-muted-foreground/70 hover:text-foreground transition-colors"
+        aria-label={t.board.pathToVictoryInfoTitle}
+      >
+        <HelpCircle className="size-3.5" />
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label={t.common.close}
+            className="fixed inset-0 z-30 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute z-40 top-7 left-0 w-[min(92vw,24rem)] bg-surface border border-border rounded-2xl shadow-card overflow-hidden text-left">
+            {panelBody}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 // Minimum rounds played before Path to Victory has enough data to be useful —
 // mirrors the Badge grace period (see src/lib/badges.ts: MIN_PLAYED).
 const PATH_TO_VICTORY_MIN_PLAYED = 2;
@@ -2363,7 +2439,7 @@ function PathToVictoryPanel({
 
   const ranks = useMemo(() => new Map(standings.map((r) => [r.player.id, r.rank])), [standings]);
   const roundsForCalc = useMemo(
-    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null, short: r.short })),
+    () => rounds.map((r) => ({ id: r.id, locked: r.locked_at !== null })),
     [rounds],
   );
   const playerById = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
@@ -2389,8 +2465,11 @@ function PathToVictoryPanel({
               <Target className="size-4" />
             </span>
             <div>
-              <h2 className="font-display text-lg font-semibold">{t.board.pathToVictory}</h2>
-              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
+              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-1.5">
+                {t.board.pathToVictory}
+                <PathToVictoryInfo />
+              </h2>
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
                 {t.board.pathToVictorySubtitle}
               </p>
             </div>
