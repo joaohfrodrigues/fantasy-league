@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulateWinProbability, playerAverage, type ScoreLookup } from "./simulation";
+import { simulateWinProbability, type ScoreLookup } from "./simulation";
 
 function lookup(scores: Record<string, number>): ScoreLookup {
   return (pid, rid) => scores[`${pid}:${rid}`];
@@ -226,100 +226,5 @@ describe("simulateWinProbability (lock-aware)", () => {
     expect(withBenchmarks.get("trailer")!).toBeGreaterThanOrEqual(
       withoutBenchmarks.get("trailer")! - 0.01,
     );
-  });
-});
-
-describe("playerAverage", () => {
-  it("returns null for no scores", () => {
-    expect(playerAverage([])).toBeNull();
-  });
-
-  it("returns the mean of played scores", () => {
-    expect(playerAverage([80, 60, 40])).toBeCloseTo(60, 5);
-  });
-});
-
-describe("simulateWinProbability (What-if slider mean)", () => {
-  it("does not collapse odds to 0%/100% when a slider mean is set (variance preserved)", () => {
-    const rounds = [
-      { id: "r1", locked: true },
-      { id: "r2", locked: false },
-      { id: "r3", locked: false },
-      { id: "r4", locked: false },
-    ];
-    const score = lookup({
-      "p1:r1": 70,
-      "p2:r1": 65,
-      "p3:r1": 60,
-    });
-    // Same slider mean for every player — if variance collapsed (e.g. the mean
-    // were fed in as a flat per-round constant) this would converge to a tie
-    // split with near-zero spread; it should instead keep a real distribution.
-    const whatIfMean = new Map([
-      ["p1", 70],
-      ["p2", 70],
-      ["p3", 70],
-    ]);
-    const probs = simulateWinProbability({ players, rounds, score, whatIfMean });
-    probs.forEach((p) => {
-      expect(p).toBeGreaterThan(0);
-      expect(p).toBeLessThan(1);
-    });
-  });
-
-  it("uses the player's own observed variance around the slider mean, not the league's", () => {
-    const two = [{ id: "steady" }, { id: "volatile" }];
-    const rounds = [
-      { id: "r1", locked: true },
-      { id: "r2", locked: true },
-      { id: "r3", locked: true },
-      { id: "r4", locked: false },
-      { id: "r5", locked: false },
-    ];
-    const score = lookup({
-      "steady:r1": 60,
-      "steady:r2": 61,
-      "steady:r3": 59,
-      "volatile:r1": 90,
-      "volatile:r2": 20,
-      "volatile:r3": 55,
-    });
-    // Both players get the same slider mean going forward; the volatile player's
-    // wider historical spread should give the trailing/leading dynamic more
-    // uncertainty than if both used a shared (tight) variance.
-    const sameMean = new Map([
-      ["steady", 60],
-      ["volatile", 60],
-    ]);
-    const probs = simulateWinProbability({ players: two, rounds, score, whatIfMean: sameMean });
-    // Both banked totals are close (180 vs 165), so with meaningfully different
-    // per-player variance neither should be a near-certain winner.
-    expect(probs.get("steady")!).toBeLessThan(0.95);
-    expect(probs.get("volatile")!).toBeLessThan(0.95);
-  });
-
-  it("falls back to league-wide variance for a slider mean when fewer than 2 rounds are played", () => {
-    const two = [{ id: "rookie" }, { id: "veteran" }];
-    const rounds = [
-      { id: "r1", locked: true },
-      { id: "r2", locked: false },
-      { id: "r3", locked: false },
-    ];
-    // rookie has only 1 played round (no own variance to derive); veteran has 3.
-    const score = lookup({
-      "rookie:r1": 60,
-      "veteran:r1": 55,
-      "veteran:r2": 58,
-      "veteran:r3": 62,
-    });
-    const whatIfMean = new Map([
-      ["rookie", 60],
-      ["veteran", 60],
-    ]);
-    // Should not throw and should still produce a valid probability distribution
-    // for the under-sampled player (the league fallback kicks in for them).
-    const probs = simulateWinProbability({ players: two, rounds, score, whatIfMean });
-    expect(probs.get("rookie")!).toBeGreaterThan(0);
-    expect(probs.get("rookie")!).toBeLessThan(1);
   });
 });

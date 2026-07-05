@@ -77,8 +77,8 @@ _Avoid_: a bare "prize" when it could be confused with a Round prize.
 **Badge**:
 A derived, non-persisted per-player tag earned from round results — On Fire (a
 [[Round win]] streak), On the Rise / The Bottler (biggest rank move in the latest
-round), The Ghost (no points). Computed from saved scores only (never What-if) and
-not shown until at least two rounds are played.
+round), The Ghost (no points). Computed from saved scores only (never Alternative
+Reality) and not shown until at least two rounds are played.
 _Avoid_: award, achievement, trophy (Trophy/Round prize is the emoji token, distinct).
 
 ### Simulation & projection
@@ -91,28 +91,41 @@ canonical term in code or discussion).
 
 **Simulation**:
 The Monte Carlo process that produces win probability by running many random
-draws of the remaining rounds. Refers to the engine only — not the What-if recompute.
+draws of the remaining rounds. Refers to the engine only — [[Path to Victory]]
+is a separate, simpler projection built alongside it, not on top of it.
 
 **Trial**:
 A single Monte Carlo draw: one random play-out of all remaining rounds, ending
 with one player in first. Win probability is the share of trials a player wins.
 _Avoid_: scenario, run, sample.
 
-**What-if**:
-A user-authored set of hypothetical results for future (unplayed, unlocked)
-rounds, layered over the real data and never persisted; standings and win
-probability recompute from it. The input mechanism may change over time (e.g. a
-slider) but the concept does not.
-_Avoid_: scenario, hypothetical, projection.
+**Path to Victory**:
+A personalized projection anchored to the viewer's claimed [[Player]] row: the
+per-round average they need over the rounds remaining to catch the league
+leader (the leader's own projected finish, plus a one-round safety buffer from
+their score spread, minus the chaser's current total). When the claimed player
+is already leading, shows the buffer their nearest chaser needs instead.
+Renders inline just above Standings (not a popup) so it's part of the default
+view once claimed; hidden until at least 2 rounds are played (same grace
+period as [[Badge]]) and suppressed once every round is locked. The claimed
+player is the default subject but the viewer can pick anyone. Pure
+computation, never persisted. See `src/lib/path-to-victory.ts`.
+_Avoid_: what-if, projection (ambiguous with Win probability).
 
 **Alternative Reality**:
 A "change the past" exploration mode: the user excludes chosen played (locked)
 rounds from the standings recompute, to see how much those rounds mattered.
-Distinct from [[What-if]], which projects hypothetical _future_ rounds forward
-— Alternative Reality retroactively removes _real, already-played_ rounds
-instead. Like What-if, it is never persisted and never affects Badge or Round
-prize tallies (those are record metrics: locked rounds only, saved scores only).
-_Avoid_: what-if (a separate concept), rewrite history.
+Never persisted and never affects Badge or Round prize tallies (those are
+record metrics: locked rounds only, saved scores only).
+_Avoid_: what-if, rewrite history.
+
+**Head-to-head**:
+A side-by-side comparison of two chosen players' records across every locked
+round both have a score in: per-round wins/losses/draws and running totals.
+Defaults to the claimed player against the league leader — or, if the claimed
+player IS the leader, against their nearest chaser instead. Read-only; does
+not affect Standings or Win probability. See `src/lib/h2h.ts`.
+_Avoid_: H2H as the user-facing label (fine in code/discussion), matchup.
 
 ### History
 
