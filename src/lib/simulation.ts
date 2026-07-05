@@ -12,6 +12,8 @@
 // played). The skill estimate still uses all played scores, so a provisional result
 // informs the projection without being banked.
 
+import { clamp } from "./utils";
+
 // Valid score range for a round. Future-round draws are clamped to it; the score
 // inputs in the UI use the same bounds. Single source of truth for both.
 export const SCORE_MIN = -10;
@@ -40,8 +42,6 @@ const ROUND_BENCHMARKS: Record<string, { mean: number; std: number }> = {
   SF: { mean: 48, std: 20 },
   F: { mean: 44, std: 20 },
 };
-
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 // Small deterministic PRNG (mulberry32) so the simulation is reproducible.
 function mulberry32(seed: number) {

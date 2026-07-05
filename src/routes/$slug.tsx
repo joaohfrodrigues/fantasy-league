@@ -54,17 +54,13 @@ import {
 import { useT, useLocale, type Dict } from "@/lib/i18n";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
-import {
-  simulateWinProbability,
-  toSimRound,
-  playerAverage,
-  SCORE_MIN,
-  SCORE_MAX,
-} from "@/lib/simulation";
+import { toSimRound, playerAverage, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
 import { Slider } from "@/components/ui/slider";
-import { computeStandings, computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
+import { computeRoundMaxes, TIEBREAKS, type TiebreakMode } from "@/lib/standings";
 import { computeH2H } from "@/lib/h2h";
-import { assignBadges } from "@/lib/badges";
+import { computeLiveMetrics } from "@/lib/league-metrics";
+import { computeRecordMetrics } from "@/lib/badges";
+import { resolveWhatIf, resolveAlternativeReality } from "@/lib/what-if";
 import { BADGE_EMOJI } from "@/components/badge-emoji";
 import { useMounted, useCountUp } from "@/hooks/use-animations";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -359,12 +355,10 @@ function LeagueBoard() {
   // Saved scores with hypothetical what-if values layered on top (when any
   // exact per-round overrides exist — independent of which Explore tab is
   // currently visible, so switching tabs never discards this).
-  const effectiveScoreMap = useMemo(() => {
-    if (whatIf.size === 0) return scoreMap;
-    const m = new Map(scoreMap);
-    whatIf.forEach((v, k) => m.set(k, v));
-    return m;
-  }, [scoreMap, whatIf]);
+  const effectiveScoreMap = useMemo(
+    () => resolveWhatIf({ scoreMap, cellOverrides: whatIf }).effectiveScoreMap,
+    [scoreMap, whatIf],
+  );
 
   // Debounced copy that feeds the heavy Monte Carlo + standings so typing
   // hypothetical scores doesn't re-run the simulation on every keystroke.
@@ -411,8 +405,8 @@ function LeagueBoard() {
   // Rounds after Alternative Reality exclusion — feeds the simulation and
   // standings only; the table still renders every round column from `rounds`.
   const altRealityRounds = useMemo(
-    () => (altRealityOn ? rounds.filter((r) => !altRealityExcluded.has(r.id)) : rounds),
-    [rounds, altRealityExcluded, altRealityOn],
+    () => resolveAlternativeReality({ rounds, excludedRoundIds: altRealityExcluded }).activeRounds,
+    [rounds, altRealityExcluded],
   );
 
   const roundsPlayedIds = useMemo(
@@ -445,40 +439,28 @@ function LeagueBoard() {
   // they're the real record, not a hypothetical).
   const simRoundsWithLock = useMemo(() => altRealityRounds.map(toSimRound), [altRealityRounds]);
 
-  // Monte Carlo win probability (see src/lib/simulation.ts). Lock-aware: locked
-  // rounds are banked, unlocked rounds are re-simulated. Live (uses simMap = saved
-  // + What-if), so it reacts to edits, What-if exploration, and Alternative
-  // Reality's excluded rounds.
-  const dinnerProb = useMemo(
+  // Live metrics (see src/lib/league-metrics.ts): win probability + standings
+  // together, one seam shared with round-lock banter generation and the OG
+  // image. Live: total + tiebreak use Alternative Reality's round set when
+  // active; win probability reacts to What-if's slider mean too.
+  const { standings: baseStandings, winProbability: dinnerProb } = useMemo(
     () =>
-      simulateWinProbability({
+      computeLiveMetrics({
         players,
         rounds: simRoundsWithLock,
         score: scoreOf,
+        tiebreak,
         whatIfMean: simWhatIfMean.size > 0 ? simWhatIfMean : undefined,
       }),
-    [players, simRoundsWithLock, scoreOf, simWhatIfMean],
+    [players, simRoundsWithLock, scoreOf, tiebreak, simWhatIfMean],
   );
 
-  // Standings with the league's tiebreak applied to rank (see src/lib/standings.ts).
-  // Live: total + tiebreak use Alternative Reality's round set when active.
-  const baseStandings = useMemo(
+  // Record metrics (see src/lib/badges.ts): Badges and the Round-prize win
+  // tally, both from saved scores and locked rounds only — never What-if or
+  // Alternative Reality.
+  const { badges: badgesByPlayer, lockedWins: lockedWinsByPlayer } = useMemo(
     () =>
-      computeStandings({
-        players,
-        rounds: altRealityRounds,
-        score: scoreOf,
-        winProbability: dinnerProb,
-        tiebreak,
-        roundMaxes: roundMaxById,
-      }),
-    [players, altRealityRounds, scoreOf, dinnerProb, tiebreak, roundMaxById],
-  );
-
-  // Round badges (see src/lib/badges.ts). Record metric: saved scores, locked rounds only.
-  const badgesByPlayer = useMemo(
-    () =>
-      assignBadges({
+      computeRecordMetrics({
         players,
         rounds: roundsWithLock,
         score: (pid, rid) => scoreMap.get(`${pid}:${rid}`),
@@ -486,25 +468,6 @@ function LeagueBoard() {
       }),
     [players, roundsWithLock, scoreMap, tiebreak],
   );
-
-  // Round-prize tally (the per-player win count shown in the prize column). Record
-  // metric: counts wins in locked rounds only, from saved scores.
-  const lockedWinsByPlayer = useMemo(() => {
-    const lockedRounds = rounds.filter((r) => r.locked_at !== null);
-    const savedScore = (pid: string, rid: string) => scoreMap.get(`${pid}:${rid}`);
-    const maxes = computeRoundMaxes(players, lockedRounds, savedScore);
-    const m = new Map<string, number>();
-    players.forEach((p) => {
-      let w = 0;
-      lockedRounds.forEach((r) => {
-        const mx = maxes.get(r.id);
-        const v = savedScore(p.id, r.id);
-        if (mx !== undefined && typeof v === "number" && v === mx) w += 1;
-      });
-      m.set(p.id, w);
-    });
-    return m;
-  }, [players, rounds, scoreMap]);
 
   // Mobile reveals only the most recently played round columns, widening to show
   // more as the viewport grows (lg shows all). Maps each round to its recency

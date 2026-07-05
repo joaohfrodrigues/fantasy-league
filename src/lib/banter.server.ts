@@ -105,7 +105,11 @@ export function templatedBanter(input: BanterInput, locale: BanterLocale): strin
   return parts.slice(0, 3).join(" ") || tpl.fallback(roundName);
 }
 
-async function callGemini(
+export type GeminiCaller = (
+  prompt: string,
+) => Promise<{ en: string; pt: string; devices: string[] } | null>;
+
+async function defaultCallGemini(
   prompt: string,
 ): Promise<{ en: string; pt: string; devices: string[] } | null> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
@@ -266,9 +270,15 @@ export function buildPrompt(input: BanterInput): string {
     .join(" ");
 }
 
-/** Generate banter for a round in both locales. AI when available, templated otherwise. */
+/**
+ * Generate banter for a round in both locales. AI when available, templated
+ * otherwise. `callGemini` is accepted rather than hardcoded so the AI-fails ->
+ * templated-fallback path is directly testable with a fake caller, not only
+ * via `fetch` mocking.
+ */
 export async function getBanter(
   input: BanterInput,
+  callGemini: GeminiCaller = defaultCallGemini,
 ): Promise<{ en: string; pt: string; ai: boolean; devices: string[] }> {
   const ai = await callGemini(buildPrompt(input));
   if (ai) return { en: ai.en, pt: ai.pt, ai: true, devices: ai.devices };

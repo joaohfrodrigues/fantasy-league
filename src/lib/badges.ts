@@ -94,3 +94,34 @@ export function assignBadges<P extends { id: string }>(params: {
 
   return result;
 }
+
+/**
+ * The full Record: Badges plus the locked-round win tally that backs the Round
+ * prize column. Both are the finalized record — locked rounds and saved scores
+ * only, never What-if or Alternative Reality — so they're computed together
+ * rather than each call site re-deriving locked-round wins on its own.
+ */
+export function computeRecordMetrics<P extends { id: string }>(params: {
+  players: P[];
+  rounds: { id: string; locked?: boolean }[];
+  score: ScoreLookup;
+  tiebreak: TiebreakMode;
+}): { badges: Map<string, BadgeId[]>; lockedWins: Map<string, number> } {
+  const { players, rounds, score } = params;
+  const badges = assignBadges(params);
+
+  const lockedRounds = rounds.filter((r) => r.locked);
+  const maxes = computeRoundMaxes(players, lockedRounds, score);
+  const lockedWins = new Map<string, number>();
+  players.forEach((p) => {
+    let wins = 0;
+    lockedRounds.forEach((r) => {
+      const max = maxes.get(r.id);
+      const v = score(p.id, r.id);
+      if (max !== undefined && typeof v === "number" && v === max) wins += 1;
+    });
+    lockedWins.set(p.id, wins);
+  });
+
+  return { badges, lockedWins };
+}
