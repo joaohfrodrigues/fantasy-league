@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # Pinned to an exact, frequently-releasing beta version (no `^` range) to match
+      # @lovable.dev/vite-tanstack-config's nitro peer requirement. Its releases are almost
+      # always younger than bunfig.toml's 24h minimumReleaseAge cooldown, and with no version
+      # range to fall back to, `bun install` fails outright during Dependabot's update step.
+      # Bump nitro manually alongside the lovable.dev config package instead.
+      - dependency-name: "nitro"
     groups:
       dependencies:
         dependency-type: "production"
