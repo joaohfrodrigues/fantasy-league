@@ -19,6 +19,8 @@ export const pt = {
     metaTitle: "Fantasy Tracker",
     metaDescription:
       "Acompanha as tuas ligas fantasy ronda a ronda — vencedores, prémios, probabilidades ao vivo e o histórico das tuas ligas.",
+    leagueMetaDescription: (players: number, played: number, total: number) =>
+      `${players} ${players === 1 ? "jogador" : "jogadores"} · Ronda ${played} / ${total}`,
     notFoundTitle: "Página não encontrada",
     notFoundBody: "A página que procuras não existe ou foi movida.",
     goHome: "Voltar ao início",

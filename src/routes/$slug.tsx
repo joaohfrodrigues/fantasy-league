@@ -57,9 +57,12 @@ import {
   getAuditLog as getAuditLogFn,
   exportLeague as exportLeagueFn,
   updateTiebreak as updateTiebreakFn,
+  getLeagueMeta,
   type AuditEntry,
+  type LeagueMeta,
 } from "@/lib/leagues.functions";
-import { useT, useLocale, type Dict } from "@/lib/i18n";
+import { useT, useLocale, getDict, type Dict, type Locale } from "@/lib/i18n";
+import { resolveLocale } from "@/lib/locale.functions";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { toSimRound, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
@@ -81,12 +84,32 @@ import {
 } from "@/components/StandingsTable";
 
 export const Route = createFileRoute("/$slug")({
-  head: ({ params }) => {
+  loader: async ({ params }): Promise<{ locale: Locale; leagueMeta: LeagueMeta | null }> => {
+    // leagueMeta only feeds <head> (title/description/OG tags); a DB hiccup here
+    // must never fail the whole page load, so it degrades to the generic fallback.
+    const [locale, leagueMeta] = await Promise.all([
+      resolveLocale(),
+      getLeagueMeta({ data: { slug: params.slug } }).catch(() => null),
+    ]);
+    return { locale, leagueMeta };
+  },
+  head: ({ params, loaderData }) => {
     const site = import.meta.env.VITE_SITE_URL ?? "";
     const ogImage = `${site}/api/og/${params.slug}`;
+    const t = getDict(loaderData?.locale ?? "pt");
+    const meta = loaderData?.leagueMeta ?? null;
+    const title = meta?.name || t.root.metaTitle;
+    const description = meta
+      ? t.root.leagueMetaDescription(meta.playerCount, meta.roundsPlayed, meta.totalRounds)
+      : t.root.metaDescription;
     return {
       meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
         { property: "og:image", content: ogImage },
+        ...(site ? [{ property: "og:url", content: `${site}/${params.slug}` }] : []),
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:image", content: ogImage },
       ],
