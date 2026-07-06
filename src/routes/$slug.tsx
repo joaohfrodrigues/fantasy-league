@@ -27,11 +27,8 @@ import {
   Menu,
   Share2,
   UserCheck,
-  Sparkles,
   Shuffle,
   Target,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import {
@@ -82,6 +79,8 @@ import {
   type StandingsColumn,
   type StandingsRow,
 } from "@/components/StandingsTable";
+import { RoundBanterCard } from "@/components/RoundBanterCard";
+import { shareRoundRecap } from "@/lib/share-recap";
 
 export const Route = createFileRoute("/$slug")({
   loader: async ({ params }): Promise<{ locale: Locale; leagueMeta: LeagueMeta | null }> => {
@@ -465,7 +464,7 @@ function LeagueBoard() {
     return rounds
       .filter((r) => r.locked_at !== null && pick(r))
       .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime())
-      .map((r) => ({ name: r.name, text: pick(r)! }));
+      .map((r) => ({ id: r.id, name: r.name, text: pick(r)! }));
   }, [rounds, locale]);
 
   // 0 = most recent round's summary. Snaps back to the latest whenever the
@@ -1104,39 +1103,31 @@ function LeagueBoard() {
           {t.board.heroFootnote}
         </p>
         {shownSummary && (
-          <div className="mt-8 rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-5 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch">
-                <Sparkles className="size-3.5" aria-hidden="true" />
-                {t.board.afterRound(shownSummary.name)}
-              </p>
-              {summarizedRounds.length > 1 && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() =>
-                      setSummaryIndex((i) => Math.min(i + 1, summarizedRounds.length - 1))
-                    }
-                    disabled={summaryIndex >= summarizedRounds.length - 1}
-                    aria-label={t.board.banterPrevRound}
-                    title={t.board.banterPrevRound}
-                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                  >
-                    <ChevronLeft className="size-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setSummaryIndex((i) => Math.max(i - 1, 0))}
-                    disabled={summaryIndex === 0}
-                    aria-label={t.board.banterNextRound}
-                    title={t.board.banterNextRound}
-                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                  >
-                    <ChevronRight className="size-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-            <p className="text-sm text-foreground/80 leading-relaxed">{shownSummary.text}</p>
-          </div>
+          <RoundBanterCard
+            className="mt-8 rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-5 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both"
+            roundName={shownSummary.name}
+            text={shownSummary.text}
+            locked
+            onShare={() => shareRoundRecap(slug, shownSummary.id, shownSummary.name)}
+            pagination={
+              summarizedRounds.length > 1
+                ? {
+                    atOldest: summaryIndex >= summarizedRounds.length - 1,
+                    atNewest: summaryIndex === 0,
+                    onGoOlder: () =>
+                      setSummaryIndex((i) => Math.min(i + 1, summarizedRounds.length - 1)),
+                    onGoNewer: () => setSummaryIndex((i) => Math.max(i - 1, 0)),
+                  }
+                : undefined
+            }
+            labels={{
+              afterRound: t.board.afterRound,
+              shareRound: t.board.shareRound,
+              shareRoundTitle: t.board.shareRoundTitle,
+              banterPrevRound: t.board.banterPrevRound,
+              banterNextRound: t.board.banterNextRound,
+            }}
+          />
         )}
       </section>
 
@@ -1395,6 +1386,10 @@ function LeagueBoard() {
                 rounds.find((r) => r.id === roundId)?.name ?? "",
               )
             }
+            onShareRound={(roundId) =>
+              shareRoundRecap(slug, roundId, rounds.find((r) => r.id === roundId)?.name ?? "")
+            }
+            shareRoundTitle={() => t.board.shareRoundTitle}
             emptyState={
               unlocked ? (
                 <button
@@ -2663,21 +2658,8 @@ function RoundEditor({
 
   const round = rounds.find((r) => r.id === currentId);
 
-  async function handleShareRound() {
-    const recapUrl = `${window.location.origin}/api/recap/${slug}/${currentId}`;
-    try {
-      if (typeof navigator !== "undefined" && "canShare" in navigator) {
-        const blob = await fetch(recapUrl).then((r) => r.blob());
-        const file = new File([blob], "round-recap.png", { type: "image/png" });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: round?.name ?? "" });
-          return;
-        }
-      }
-    } catch {
-      // fall through
-    }
-    window.open(recapUrl, "_blank");
+  function handleShareRound() {
+    return shareRoundRecap(slug, currentId, round?.name ?? "");
   }
 
   function openRoundEditor(mode: "new" | "current") {
@@ -2871,6 +2853,8 @@ function RoundEditor({
                 <Lock className="size-3.5 shrink-0 text-pitch" />
                 {t.board.roundLockedNote}
               </div>
+              {/* Duplicates the standings-table and hero-banter share shortcuts on
+                  purpose: an admin mid-edit can share without closing this dialog. */}
               <button
                 onClick={handleShareRound}
                 title={t.board.shareRoundTitle}

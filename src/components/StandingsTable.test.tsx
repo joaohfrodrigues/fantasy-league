@@ -152,6 +152,58 @@ describe("StandingsTable", () => {
     expect(clicked).toEqual(["r3"]);
   });
 
+  it("renders a share-round shortcut only for locked round headers when onShareRound is given", () => {
+    const { container, rerender } = render(
+      <StandingsTable columns={makeColumns()} rows={makeRows()} labels={labels} />,
+    );
+    expect(container.querySelectorAll("thead th button")).toHaveLength(0);
+
+    rerender(
+      <StandingsTable
+        columns={makeColumns()}
+        rows={makeRows()}
+        labels={labels}
+        onShareRound={() => {}}
+        shareRoundTitle={(id) => `Share ${id}`}
+      />,
+    );
+    // r1, r2, r3 are locked; r4 is not — only the locked columns get the shortcut.
+    const shareButtons = container.querySelectorAll("thead th button");
+    expect(shareButtons).toHaveLength(3);
+    expect(shareButtons[0].getAttribute("title")).toBe("Share r1");
+  });
+
+  it("calls onShareRound with the column id when its share shortcut is clicked", () => {
+    const clicked: string[] = [];
+    const { getByTitle } = render(
+      <StandingsTable
+        columns={makeColumns()}
+        rows={makeRows()}
+        labels={labels}
+        onShareRound={(id) => clicked.push(id)}
+        shareRoundTitle={(id) => `Share ${id}`}
+      />,
+    );
+    getByTitle("Share r2").click();
+    expect(clicked).toEqual(["r2"]);
+  });
+
+  it("shows both edit and share shortcuts together when both callbacks are given", () => {
+    const { getByTitle } = render(
+      <StandingsTable
+        columns={makeColumns()}
+        rows={makeRows()}
+        labels={labels}
+        onEditRound={() => {}}
+        editRoundTitle={(id) => `Edit ${id}`}
+        onShareRound={() => {}}
+        shareRoundTitle={(id) => `Share ${id}`}
+      />,
+    );
+    expect(getByTitle("Edit r1")).not.toBeNull();
+    expect(getByTitle("Share r1")).not.toBeNull();
+  });
+
   it("matches the static (example-style) rendering snapshot", () => {
     const { container } = render(
       <StandingsTable columns={makeColumns()} rows={makeRows()} labels={labels} />,
