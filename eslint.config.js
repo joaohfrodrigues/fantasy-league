@@ -34,6 +34,10 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // New in eslint-plugin-react-hooks v7's recommended set; downgraded to warn since
+      // fixing existing violations would mean an unrelated refactor of pre-existing effects.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
     },
   },
   eslintPluginPrettier,
