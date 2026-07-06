@@ -92,7 +92,9 @@ canonical term in code or discussion).
 **Simulation**:
 The Monte Carlo process that produces win probability by running many random
 draws of the remaining rounds. Refers to the engine only — [[Path to Victory]]
-is a separate, simpler projection built alongside it, not on top of it.
+shares its league-wide mean/std and skill-shrinkage building blocks but runs
+its own single-player trial; it is not a multi-player race and does not call
+`simulateWinProbability`.
 
 **Trial**:
 A single Monte Carlo draw: one random play-out of all remaining rounds, ending
@@ -101,15 +103,22 @@ _Avoid_: scenario, run, sample.
 
 **Path to Victory**:
 A personalized projection anchored to the viewer's claimed [[Player]] row: the
-per-round average they need over the rounds remaining to catch the league
-leader (the leader's own projected finish, plus a one-round safety buffer from
-their score spread, minus the chaser's current total). When the claimed player
-is already leading, shows the buffer their nearest chaser needs instead.
-Renders inline just above Standings (not a popup) so it's part of the default
-view once claimed; hidden until at least 2 rounds are played (same grace
-period as [[Badge]]) and suppressed once every round is locked. The claimed
-player is the default subject but the viewer can pick anyone. Pure
-computation, never persisted. See `src/lib/path-to-victory.ts`.
+per-round average they need over the rounds remaining for a 90% chance of
+catching the league leader (a Monte Carlo trial of the leader's own shrunk
+skill projection over the rounds remaining, at the 90th percentile, minus the
+chaser's current total — reusing [[Simulation]]'s league-wide mean/std and
+shrinkage so a bigger or more volatile field widens the number). When the
+claimed player is already leading, flips the same mechanism around: it
+projects the nearest chaser's own 90th-percentile upside and shows the
+average the leader themselves needs to stay clear of it — their own required
+average for a 90% chance of winning outright, not the chaser's catch-up
+number. Renders inline just above Standings (not a popup) so it's part of
+the default view once claimed; hidden until at least 2 rounds are played
+(same grace period as [[Badge]]) and suppressed once every round is locked.
+The claimed player is the default subject but the viewer can pick anyone
+(rendered as an inline, styled player-picker within the sentence itself, not
+a separate control). Pure computation, never persisted. See
+`src/lib/path-to-victory.ts`.
 _Avoid_: what-if, projection (ambiguous with Win probability).
 
 **Alternative Reality**:
@@ -124,7 +133,9 @@ A side-by-side comparison of two chosen players' records across every locked
 round both have a score in: per-round wins/losses/draws and running totals.
 Defaults to the claimed player against the league leader — or, if the claimed
 player IS the leader, against their nearest chaser instead. Read-only; does
-not affect Standings or Win probability. See `src/lib/h2h.ts`.
+not affect Standings or Win probability. Toggled by its own button the same
+way Alternative Reality's is — an inline panel that appears/disappears above
+Standings, not a popup. See `src/lib/h2h.ts`.
 _Avoid_: H2H as the user-facing label (fine in code/discussion), matchup.
 
 ### History

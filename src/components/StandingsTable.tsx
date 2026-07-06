@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronDown, ChevronsUpDown, ChevronUp, Lock } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, ChevronUp, Lock, Pencil } from "lucide-react";
 
 // Presentational standings table shared by the live league board ($slug.tsx)
 // and the landing-page example (ExampleBoard.tsx). Both surfaces must render
@@ -68,6 +68,10 @@ export interface StandingsTableProps {
   emptyState?: ReactNode;
   labels: StandingsLabels;
   scoreCellTextClassName?: string;
+  /** When set, each round header gets an edit-round shortcut instead of a
+   * separate row of per-round buttons above the table. */
+  onEditRound?: (columnId: string) => void;
+  editRoundTitle?: (columnId: string) => string;
 }
 
 export function StandingsTable({
@@ -79,6 +83,8 @@ export function StandingsTable({
   emptyState,
   labels,
   scoreCellTextClassName = "text-xs lg:text-sm",
+  onEditRound,
+  editRoundTitle,
 }: StandingsTableProps) {
   return (
     <div className="overflow-x-auto">
@@ -112,7 +118,19 @@ export function StandingsTable({
                 className={`text-center font-medium py-3 px-1.5 ${roundColClass(c.recencyRank)}`}
                 title={c.fullTitle}
               >
-                <RoundHeaderLabel sort={sort} column={c} sortTitle={labels.sortBy(c.fullTitle)} />
+                <span className="inline-flex items-center justify-center gap-1">
+                  <RoundHeaderLabel sort={sort} column={c} sortTitle={labels.sortBy(c.fullTitle)} />
+                  {onEditRound && (
+                    <button
+                      type="button"
+                      onClick={() => onEditRound(c.id)}
+                      title={editRoundTitle?.(c.id)}
+                      className="hidden md:inline-flex text-muted-foreground/70 hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="size-2.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </span>
               </th>
             ))}
             <th className="text-right font-medium px-6 py-3">

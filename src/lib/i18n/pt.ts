@@ -181,16 +181,32 @@ export const pt = {
     moreActionsLocked: "Desbloqueie para aceder a mais ações.",
 
     pathToVictory: "Caminho para a vitória",
-    pathToVictorySubtitle:
-      "Uma projeção, não uma garantia — assume que o líder mantém a sua própria média.",
+    pathToVictorySubtitle: "Uma projeção, não uma garantia.",
     pathToVictoryPlayerLabel: "Jogador",
-    pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para te apanhar.`,
-    pathToVictoryLeadingSolo: "Ainda não há mais ninguém na liga para te perseguir.",
-    pathToVictoryChasing: (name: string, avg: number) =>
-      `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para apanhar ${name}.`,
-    pathToVictoryImpossible: (name: string) =>
-      `A diferença é grande demais para fechar — nem uma série perfeita chegaria para apanhar ${name}.`,
+    // Os sufixos seguem o <select> do jogador escolhido, inline numa frase
+    // (ex.: "<Sofia> precisa de uma média..."), por isso começam a meio da
+    // frase. Verbos/preposições escolhidos de propósito para soarem naturais
+    // sem artigo antes do nome (evita ter de adivinhar o género do jogador):
+    // "alcançar" e "vantagem sobre", em vez de "apanhar"/"à frente de", que
+    // pedem naturalmente "a"/"o" antes do nome (ex.: "apanhar a Sofia").
+    pathToVictoryChasingSuffix: (name: string, avg: number) =>
+      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de alcançar ${name}.`,
+    pathToVictoryLeadingSuffix: (name: string, avg: number) =>
+      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de manter a vantagem sobre ${name}.`,
+    pathToVictoryLeadingSoloSuffix: " ainda não tem perseguidores na liga.",
+    pathToVictoryImpossibleSuffix: (name: string) =>
+      ` não consegue fechar a diferença — nem uma série perfeita chegaria para alcançar ${name}.`,
+    pathToVictoryInfoTitle: "Como é calculado",
+    pathToVictoryInfoSubtitle: "Porquê 90%, e não uma garantia",
+    pathToVictoryInfoBody1bold: "Simulado, não adivinhado:",
+    pathToVictoryInfoBody1:
+      "corremos milhares de versões simuladas do resto da época, usando o histórico de pontuação da tua liga — quantos jogadores há e o quanto as pontuações oscilam de ronda para ronda.",
+    pathToVictoryInfoBody2bold: "O objetivo de 90%:",
+    pathToVictoryInfoBody2:
+      "a média apresentada teria sido suficiente para apanhar o líder em 9 de cada 10 dessas simulações — uma margem de segurança, não o resultado mais provável.",
+    pathToVictoryInfoBody3bold: "Ligas maiores ou mais imprevisíveis exigem mais:",
+    pathToVictoryInfoBody3:
+      "um grupo grande e imprevisível aumenta o número; um grupo pequeno e estável reduz-o.",
 
     altReality: "Muda o passado",
     altRealityTitle: "Excluir rondas já jogadas da classificação para ver o quanto contaram",
@@ -350,6 +366,8 @@ export const pt = {
     clearScore: "Limpar pontos",
 
     afterRound: (name: string) => `Após ${name}`,
+    banterPrevRound: "Resumo da ronda anterior",
+    banterNextRound: "Resumo da ronda seguinte",
 
     claimRow: "Sou eu",
     unclaimRow: "Não sou eu",

@@ -30,8 +30,17 @@ import {
   Sparkles,
   Shuffle,
   Target,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import {
   verifyLeaguePassword,
@@ -163,7 +172,7 @@ function LeagueBoard() {
   // so it needs its own open state to avoid both instances opening the portal.
   const [mobileRoundPrizePickerFor, setMobileRoundPrizePickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [showH2H, setShowH2H] = useState(false);
+  const [h2hOpen, setH2hOpen] = useState(false);
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -426,15 +435,23 @@ function LeagueBoard() {
     return withRank;
   }, [baseStandings, roundIndexById, sortKey, sortDir, lockedWinsByPlayer, scoreOf]);
 
-  // Most recently locked round that has a generated summary, in the current locale.
-  const latestSummary = useMemo(() => {
+  // Every locked round with a generated summary, in the current locale,
+  // newest first — lets the banter card page back through past rounds.
+  const summarizedRounds = useMemo(() => {
     const pick = (r: Round) => (locale === "pt" ? r.summary_pt : r.summary_en) ?? r.summary_en;
-    const locked = rounds
+    return rounds
       .filter((r) => r.locked_at !== null && pick(r))
-      .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime());
-    const round = locked[0];
-    return round ? { name: round.name, text: pick(round)! } : null;
+      .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime())
+      .map((r) => ({ name: r.name, text: pick(r)! }));
   }, [rounds, locale]);
+
+  // 0 = most recent round's summary. Snaps back to the latest whenever the
+  // number of summarized rounds changes (a new round just locked).
+  const [summaryIndex, setSummaryIndex] = useState(0);
+  useEffect(() => {
+    setSummaryIndex(0);
+  }, [summarizedRounds.length]);
+  const shownSummary = summarizedRounds[Math.min(summaryIndex, summarizedRounds.length - 1)];
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -889,68 +906,68 @@ function LeagueBoard() {
             </div>
           </Link>
 
-          {/* Desktop action row — hidden on mobile */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Desktop action row — hidden on mobile. Grouped so the language
+              toggle, content-editing shortcuts, and the lock/unlock control
+              read as three distinct clusters instead of one flat icon row. */}
+          <div className="hidden md:flex items-center gap-3">
             <LanguageToggle />
             {unlocked && (
-              <button
-                onClick={() => setEditingLeagueName(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.editLeagueName}
-                aria-label={t.board.editLeagueName}
-              >
-                <Pencil className="size-3.5" />
-              </button>
+              <div className="flex items-center gap-2 pl-3 border-l border-border/60">
+                <button
+                  onClick={() => setEditingLeagueName(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.editLeagueName}
+                  aria-label={t.board.editLeagueName}
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  onClick={() => setAddingPlayer(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.addPlayer}
+                  aria-label={t.board.addPlayer}
+                >
+                  <UserPlus className="size-3.5" />
+                </button>
+                <button
+                  onClick={() => setShowHistory(true)}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.historyTitle}
+                  aria-label={t.board.history}
+                >
+                  <History className="size-3.5" />
+                </button>
+                <button
+                  onClick={exportData}
+                  className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.exportTitle}
+                  aria-label={t.board.exportData}
+                >
+                  <Download className="size-3.5" />
+                </button>
+              </div>
             )}
-            {unlocked && (
-              <button
-                onClick={() => setAddingPlayer(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.addPlayer}
-                aria-label={t.board.addPlayer}
-              >
-                <UserPlus className="size-3.5" />
-              </button>
-            )}
-            {unlocked && (
-              <button
-                onClick={() => setShowHistory(true)}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.historyTitle}
-                aria-label={t.board.history}
-              >
-                <History className="size-3.5" />
-              </button>
-            )}
-            {unlocked && (
-              <button
-                onClick={exportData}
-                className="inline-flex items-center justify-center size-8 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.exportTitle}
-                aria-label={t.board.exportData}
-              >
-                <Download className="size-3.5" />
-              </button>
-            )}
-            {unlocked ? (
-              <button
-                onClick={lock}
-                className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-pitch/15 text-pitch hover:bg-pitch/25 transition-colors"
-                title={t.board.lockTitle}
-              >
-                <Unlock className="size-3.5" />
-                {t.board.editingActive}
-              </button>
-            ) : (
-              <button
-                onClick={() => setAskPassword(true)}
-                className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
-                title={t.board.unlockTitle}
-              >
-                <Lock className="size-3.5" />
-                {t.board.editScores}
-              </button>
-            )}
+            <div className="pl-3 border-l border-border/60">
+              {unlocked ? (
+                <button
+                  onClick={lock}
+                  className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-pitch/15 text-pitch hover:bg-pitch/25 transition-colors"
+                  title={t.board.lockTitle}
+                >
+                  <Unlock className="size-3.5" />
+                  {t.board.editingActive}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setAskPassword(true)}
+                  className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                  title={t.board.unlockTitle}
+                >
+                  <Lock className="size-3.5" />
+                  {t.board.editScores}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Mobile action row — hidden on desktop */}
@@ -1063,13 +1080,39 @@ function LeagueBoard() {
         <p className="text-xs text-muted-foreground/70 mt-3 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
           {t.board.heroFootnote}
         </p>
-        {latestSummary && (
+        {shownSummary && (
           <div className="mt-8 rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-5 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch mb-2">
-              <Sparkles className="size-3.5" aria-hidden="true" />
-              {t.board.afterRound(latestSummary.name)}
-            </p>
-            <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.text}</p>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch">
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                {t.board.afterRound(shownSummary.name)}
+              </p>
+              {summarizedRounds.length > 1 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() =>
+                      setSummaryIndex((i) => Math.min(i + 1, summarizedRounds.length - 1))
+                    }
+                    disabled={summaryIndex >= summarizedRounds.length - 1}
+                    aria-label={t.board.banterPrevRound}
+                    title={t.board.banterPrevRound}
+                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setSummaryIndex((i) => Math.max(i - 1, 0))}
+                    disabled={summaryIndex === 0}
+                    aria-label={t.board.banterNextRound}
+                    title={t.board.banterNextRound}
+                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-sm text-foreground/80 leading-relaxed">{shownSummary.text}</p>
           </div>
         )}
       </section>
@@ -1142,6 +1185,17 @@ function LeagueBoard() {
         </section>
       )}
 
+      {h2hOpen && players.length >= 2 && (
+        <H2HPanel
+          players={players}
+          rounds={rounds}
+          scoreMap={scoreMap}
+          standings={baseStandings}
+          claimedPlayerId={claimedPlayerId}
+          onClose={() => setH2hOpen(false)}
+        />
+      )}
+
       {claimedPlayerId && (
         <PathToVictoryPanel
           players={players}
@@ -1188,8 +1242,12 @@ function LeagueBoard() {
                 )}
                 {players.length >= 2 && (
                   <button
-                    onClick={() => setShowH2H(true)}
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-sky-400/60 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30 transition-colors"
+                    onClick={() => setH2hOpen((open) => !open)}
+                    className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+                      h2hOpen
+                        ? "bg-sky-500 text-white shadow-sm hover:bg-sky-500/90"
+                        : "border border-sky-400/60 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30"
+                    }`}
                     title={t.board.h2hTitle}
                   >
                     <Swords className="size-3.5" />
@@ -1236,24 +1294,9 @@ function LeagueBoard() {
             </div>
             {unlocked && (
               <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                {rounds.map((r) => {
-                  const played = roundsPlayedIds.includes(r.id);
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => setEditing(r.id)}
-                      className={`hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-                        played
-                          ? "bg-pitch/15 text-pitch hover:bg-pitch/25"
-                          : "bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
-                      }`}
-                      title={t.board.roundButtonTitle(played, r.name)}
-                    >
-                      {r.locked_at ? <Lock className="size-3" /> : <Pencil className="size-3" />}
-                      {r.short}
-                    </button>
-                  );
-                })}
+                {/* Per-round editing now lives on the table's own round
+                    headers (see onEditRound below) — a separate row of
+                    round-short buttons here just duplicated those labels. */}
                 <button
                   onClick={openCreateRound}
                   className="hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-surface-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -1322,6 +1365,13 @@ function LeagueBoard() {
             rows={standingsRows}
             sort={{ key: sortKey, dir: sortDir, onSortBy: sortBy }}
             dinnerHeaderExtra={<WinOddsInfo />}
+            onEditRound={unlocked ? setEditing : undefined}
+            editRoundTitle={(roundId) =>
+              t.board.roundButtonTitle(
+                roundsPlayedIds.includes(roundId),
+                rounds.find((r) => r.id === roundId)?.name ?? "",
+              )
+            }
             emptyState={
               unlocked ? (
                 <button
@@ -1428,17 +1478,6 @@ function LeagueBoard() {
           rounds={rounds}
           onClose={() => setShowHistory(false)}
           onAuthFailure={handleAuthFailure}
-        />
-      )}
-
-      {showH2H && (
-        <H2HModal
-          players={players}
-          rounds={rounds}
-          scoreMap={scoreMap}
-          standings={baseStandings}
-          claimedPlayerId={claimedPlayerId}
-          onClose={() => setShowH2H(false)}
         />
       )}
 
@@ -2192,7 +2231,7 @@ function HistoryModal({
   );
 }
 
-function H2HModal({
+function H2HPanel({
   players,
   rounds,
   scoreMap,
@@ -2244,97 +2283,209 @@ function H2HModal({
   }, [playerAId, playerBId, samePlayer, lockedRounds, score]);
 
   return (
-    <Modal onClose={onClose} title={t.board.h2hTitle}>
-      <p className="text-xs text-muted-foreground -mt-3 mb-4">{t.board.h2hSubtitle}</p>
+    <section className="max-w-6xl mx-auto px-6 pb-2">
+      <div className="max-w-2xl mx-auto rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 border-sky-500/40 bg-sky-500/5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-sky-500/15 text-sky-400">
+              <Swords className="size-4" />
+            </span>
+            <div>
+              <h2 className="font-display text-lg font-semibold">{t.board.h2hTitle}</h2>
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
+                {t.board.h2hSubtitle}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            title={t.common.close}
+            aria-label={t.common.close}
+            className="inline-flex items-center justify-center size-8 rounded-md transition-colors bg-sky-500/15 text-sky-400 hover:bg-sky-500/25"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <select
-          value={playerAId ?? ""}
-          onChange={(e) => setPlayerAId(e.target.value || null)}
-          aria-label={t.board.h2hPlayerA}
-          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-        >
-          {players.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={playerBId ?? ""}
-          onChange={(e) => setPlayerBId(e.target.value || null)}
-          aria-label={t.board.h2hPlayerB}
-          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-        >
-          {players.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <Select value={playerAId ?? undefined} onValueChange={setPlayerAId}>
+            <SelectTrigger
+              aria-label={t.board.h2hPlayerA}
+              className="w-full h-auto justify-center gap-1 p-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-lg"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={playerBId ?? undefined} onValueChange={setPlayerBId}>
+            <SelectTrigger
+              aria-label={t.board.h2hPlayerB}
+              className="w-full h-auto justify-center gap-1 p-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-lg"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {samePlayer && (
+          <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hPickTwo}</p>
+        )}
+
+        {!samePlayer && lockedRounds.length === 0 && (
+          <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hNoRounds}</p>
+        )}
+
+        {!samePlayer && summary && summary.rounds.length > 0 && (
+          <div className="mt-5">
+            <div className="text-center">
+              <div className="font-display text-2xl font-semibold">
+                {t.board.h2hRecord(summary.aWins, summary.bWins, summary.draws)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t.board.h2hRoundsCompared(summary.rounds.length)}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between mt-4 px-1">
+              <div>
+                <div className="text-xs text-muted-foreground">{playerById.get(playerAId!)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums">
+                  {summary.aTotal}
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                {t.board.h2hTotalPoints}
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">{playerById.get(playerBId!)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums">
+                  {summary.bTotal}
+                </div>
+              </div>
+            </div>
+
+            <ul className="max-h-[40vh] overflow-y-auto mt-5 -mx-1 px-1 divide-y divide-border/40">
+              {summary.rounds.map((r) => (
+                <li key={r.roundId} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="text-sm">{roundLabelById.get(r.roundId) ?? r.roundId}</span>
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {r.aScore} – {r.bScore}
+                  </span>
+                  <span
+                    className={`text-xs font-medium tabular-nums w-16 text-right ${
+                      r.winner === "a"
+                        ? "text-pitch"
+                        : r.winner === "b"
+                          ? "text-[color:oklch(0.7_0.2_25)]"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {r.winner === "draw" ? t.board.h2hDraw : `${r.delta > 0 ? "+" : ""}${r.delta}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PathToVictoryInfo() {
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const t = useT();
+
+  const panelBody = (
+    <>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-surface-elevated/50">
+        <span className="grid place-items-center size-7 rounded-lg bg-emerald-500/15 text-emerald-400">
+          <Target className="size-3.5" />
+        </span>
+        <div>
+          <p className="text-xs font-semibold text-foreground tracking-normal normal-case">
+            {t.board.pathToVictoryInfoTitle}
+          </p>
+          <p className="text-[11px] text-muted-foreground tracking-normal normal-case">
+            {t.board.pathToVictoryInfoSubtitle}
+          </p>
+        </div>
       </div>
 
-      {samePlayer && (
-        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hPickTwo}</p>
-      )}
+      <div className="px-4 py-3 space-y-2.5">
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody1bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody1}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody2bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody2}
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground tracking-normal normal-case">
+          <span className="text-foreground font-medium">{t.board.pathToVictoryInfoBody3bold}</span>{" "}
+          {t.board.pathToVictoryInfoBody3}
+        </p>
+      </div>
+    </>
+  );
 
-      {!samePlayer && lockedRounds.length === 0 && (
-        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hNoRounds}</p>
-      )}
+  if (isMobile) {
+    return (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+            aria-label={t.board.pathToVictoryInfoTitle}
+          >
+            <HelpCircle className="size-3.5" />
+          </button>
+        </DrawerTrigger>
+        <DrawerContent className="text-left overflow-hidden">
+          <div className="pb-6">{panelBody}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
-      {!samePlayer && summary && summary.rounds.length > 0 && (
-        <div className="mt-5">
-          <div className="text-center">
-            <div className="font-display text-2xl font-semibold">
-              {t.board.h2hRecord(summary.aWins, summary.bWins, summary.draws)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t.board.h2hRoundsCompared(summary.rounds.length)}
-            </p>
+  return (
+    <span className="relative inline-flex normal-case">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-muted-foreground/70 hover:text-foreground transition-colors"
+        aria-label={t.board.pathToVictoryInfoTitle}
+      >
+        <HelpCircle className="size-3.5" />
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label={t.common.close}
+            className="fixed inset-0 z-30 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute z-40 top-7 left-0 w-[min(92vw,24rem)] bg-surface border border-border rounded-2xl shadow-card overflow-hidden text-left">
+            {panelBody}
           </div>
-
-          <div className="flex items-center justify-between mt-4 px-1">
-            <div>
-              <div className="text-xs text-muted-foreground">{playerById.get(playerAId!)}</div>
-              <div className="font-display text-xl font-semibold tabular-nums">
-                {summary.aTotal}
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              {t.board.h2hTotalPoints}
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-muted-foreground">{playerById.get(playerBId!)}</div>
-              <div className="font-display text-xl font-semibold tabular-nums">
-                {summary.bTotal}
-              </div>
-            </div>
-          </div>
-
-          <ul className="max-h-[40vh] overflow-y-auto mt-5 -mx-1 px-1 divide-y divide-border/40">
-            {summary.rounds.map((r) => (
-              <li key={r.roundId} className="flex items-center justify-between gap-3 py-2.5">
-                <span className="text-sm">{roundLabelById.get(r.roundId) ?? r.roundId}</span>
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  {r.aScore} – {r.bScore}
-                </span>
-                <span
-                  className={`text-xs font-medium tabular-nums w-16 text-right ${
-                    r.winner === "a"
-                      ? "text-pitch"
-                      : r.winner === "b"
-                        ? "text-[color:oklch(0.7_0.2_25)]"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {r.winner === "draw" ? t.board.h2hDraw : `${r.delta > 0 ? "+" : ""}${r.delta}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        </>
       )}
-    </Modal>
+    </span>
   );
 }
 
@@ -2373,8 +2524,8 @@ function PathToVictoryPanel({
   );
 
   const result = useMemo(
-    () => computePathToVictory({ rounds: roundsForCalc, score, ranks, subjectId }),
-    [roundsForCalc, score, ranks, subjectId],
+    () => computePathToVictory({ players, rounds: roundsForCalc, score, ranks, subjectId }),
+    [players, roundsForCalc, score, ranks, subjectId],
   );
 
   if (roundsPlayedCount < PATH_TO_VICTORY_MIN_PLAYED) return null;
@@ -2383,50 +2534,51 @@ function PathToVictoryPanel({
   return (
     <section className="max-w-6xl mx-auto px-6 pb-2">
       <div className="rounded-2xl border p-5 border-emerald-500/40 bg-emerald-500/5 animate-in fade-in slide-in-from-top-2 duration-300">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-start gap-3">
-            <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-emerald-500/15 text-emerald-400">
-              <Target className="size-4" />
-            </span>
-            <div>
-              <h2 className="font-display text-lg font-semibold">{t.board.pathToVictory}</h2>
-              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
-                {t.board.pathToVictorySubtitle}
-              </p>
-            </div>
+        <div className="flex items-start gap-3">
+          <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-emerald-500/15 text-emerald-400">
+            <Target className="size-4" />
+          </span>
+          <div>
+            <h2 className="font-display text-lg font-semibold inline-flex items-center gap-1.5">
+              {t.board.pathToVictory}
+              <PathToVictoryInfo />
+            </h2>
+            <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
+              {t.board.pathToVictorySubtitle}
+            </p>
           </div>
-          <label className="shrink-0">
-            <span className="sr-only">{t.board.pathToVictoryPlayerLabel}</span>
-            <select
-              value={subjectId}
-              onChange={(e) => setSubjectOverride(e.target.value)}
-              aria-label={t.board.pathToVictoryPlayerLabel}
-              className="rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-            >
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        <p className="font-display text-lg font-semibold leading-snug mt-4">
+        <div className="text-sm text-foreground/80 leading-relaxed mt-4">
+          <Select value={subjectId} onValueChange={setSubjectOverride}>
+            <SelectTrigger
+              aria-label={t.board.pathToVictoryPlayerLabel}
+              className="inline-flex w-auto h-auto gap-1 p-0 m-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-base"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {result.status === "leading"
             ? result.chaserId
-              ? t.board.pathToVictoryLeading(
+              ? t.board.pathToVictoryLeadingSuffix(
                   playerById.get(result.chaserId) ?? "",
                   result.requiredAverage,
                 )
-              : t.board.pathToVictoryLeadingSolo
+              : t.board.pathToVictoryLeadingSoloSuffix
             : result.impossible
-              ? t.board.pathToVictoryImpossible(playerById.get(result.leaderId) ?? "")
-              : t.board.pathToVictoryChasing(
+              ? t.board.pathToVictoryImpossibleSuffix(playerById.get(result.leaderId) ?? "")
+              : t.board.pathToVictoryChasingSuffix(
                   playerById.get(result.leaderId) ?? "",
                   result.requiredAverage,
                 )}
-        </p>
+        </div>
       </div>
     </section>
   );

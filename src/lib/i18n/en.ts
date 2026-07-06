@@ -178,16 +178,28 @@ export const en: Dict = {
     moreActionsLocked: "Unlock to access more actions.",
 
     pathToVictory: "Path to victory",
-    pathToVictorySubtitle:
-      "A projection, not a guarantee — assumes the leader keeps pace with their own average.",
+    pathToVictorySubtitle: "A projection, not a guarantee.",
     pathToVictoryPlayerLabel: "Player",
-    pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} needs to average ${Math.round(avg)} pts/round to catch you.`,
-    pathToVictoryLeadingSolo: "No one else in the league to chase you yet.",
-    pathToVictoryChasing: (name: string, avg: number) =>
-      `Average ${Math.round(avg)} pts/round over the rounds left to catch ${name}.`,
-    pathToVictoryImpossible: (name: string) =>
-      `The gap is too big to close — even a flawless run wouldn't catch ${name}.`,
+    // Suffixes follow the selected-player <select> inline in a sentence
+    // (e.g. "<Sofia> needs to average..."), so each starts mid-sentence.
+    pathToVictoryChasingSuffix: (name: string, avg: number) =>
+      ` needs to average ${Math.round(avg)} pts/round for a 90% chance of catching ${name}.`,
+    pathToVictoryLeadingSuffix: (name: string, avg: number) =>
+      ` needs to average ${Math.round(avg)} pts/round for a 90% chance of staying ahead of ${name}.`,
+    pathToVictoryLeadingSoloSuffix: " has no one else in the league to chase them yet.",
+    pathToVictoryImpossibleSuffix: (name: string) =>
+      ` can't close the gap — even a flawless run wouldn't catch ${name}.`,
+    pathToVictoryInfoTitle: "How it's calculated",
+    pathToVictoryInfoSubtitle: "Why 90%, not a guarantee",
+    pathToVictoryInfoBody1bold: "Simulated, not guessed:",
+    pathToVictoryInfoBody1:
+      "we run thousands of simulated versions of the rest of the season, using your league's own scoring history — how many players there are and how much scores swing round to round.",
+    pathToVictoryInfoBody2bold: "The 90% target:",
+    pathToVictoryInfoBody2:
+      "the average shown would have been enough to catch the leader in 9 out of 10 of those simulations — a safety margin, not their most likely finish.",
+    pathToVictoryInfoBody3bold: "Bigger or wilder leagues need more:",
+    pathToVictoryInfoBody3:
+      "a large, unpredictable field widens the number; a small, steady one narrows it.",
 
     altReality: "Change the past",
     altRealityTitle: "Exclude played rounds from the standings to see how much they mattered",
@@ -343,6 +355,8 @@ export const en: Dict = {
     clearScore: "Clear score",
 
     afterRound: (name: string) => `After ${name}`,
+    banterPrevRound: "Previous round summary",
+    banterNextRound: "Next round summary",
 
     claimRow: "This is me",
     unclaimRow: "Not me",
