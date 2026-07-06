@@ -2284,7 +2284,7 @@ function H2HPanel({
 
   return (
     <section className="max-w-6xl mx-auto px-6 pb-2">
-      <div className="rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 border-sky-500/40 bg-sky-500/5">
+      <div className="max-w-2xl mx-auto rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 border-sky-500/40 bg-sky-500/5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-3">
             <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-sky-500/15 text-sky-400">
