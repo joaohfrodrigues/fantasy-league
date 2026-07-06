@@ -32,6 +32,13 @@ import {
   Target,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import {
   verifyLeaguePassword,
@@ -2459,53 +2466,51 @@ function PathToVictoryPanel({
   return (
     <section className="max-w-6xl mx-auto px-6 pb-2">
       <div className="rounded-2xl border p-5 border-emerald-500/40 bg-emerald-500/5 animate-in fade-in slide-in-from-top-2 duration-300">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-start gap-3">
-            <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-emerald-500/15 text-emerald-400">
-              <Target className="size-4" />
-            </span>
-            <div>
-              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-1.5">
-                {t.board.pathToVictory}
-                <PathToVictoryInfo />
-              </h2>
-              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
-                {t.board.pathToVictorySubtitle}
-              </p>
-            </div>
+        <div className="flex items-start gap-3">
+          <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-emerald-500/15 text-emerald-400">
+            <Target className="size-4" />
+          </span>
+          <div>
+            <h2 className="font-display text-lg font-semibold inline-flex items-center gap-1.5">
+              {t.board.pathToVictory}
+              <PathToVictoryInfo />
+            </h2>
+            <p className="text-xs lg:text-sm text-muted-foreground mt-0.5">
+              {t.board.pathToVictorySubtitle}
+            </p>
           </div>
-          <label className="shrink-0">
-            <span className="sr-only">{t.board.pathToVictoryPlayerLabel}</span>
-            <select
-              value={subjectId}
-              onChange={(e) => setSubjectOverride(e.target.value)}
-              aria-label={t.board.pathToVictoryPlayerLabel}
-              className="rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-            >
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        <p className="font-display text-lg font-semibold leading-snug mt-4">
+        <div className="text-sm text-foreground/80 leading-relaxed mt-4">
+          <Select value={subjectId} onValueChange={setSubjectOverride}>
+            <SelectTrigger
+              aria-label={t.board.pathToVictoryPlayerLabel}
+              className="inline-flex w-auto h-auto gap-1 p-0 m-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {result.status === "leading"
             ? result.chaserId
-              ? t.board.pathToVictoryLeading(
+              ? t.board.pathToVictoryLeadingSuffix(
                   playerById.get(result.chaserId) ?? "",
                   result.requiredAverage,
                 )
-              : t.board.pathToVictoryLeadingSolo
+              : t.board.pathToVictoryLeadingSoloSuffix
             : result.impossible
-              ? t.board.pathToVictoryImpossible(playerById.get(result.leaderId) ?? "")
-              : t.board.pathToVictoryChasing(
+              ? t.board.pathToVictoryImpossibleSuffix(playerById.get(result.leaderId) ?? "")
+              : t.board.pathToVictoryChasingSuffix(
                   playerById.get(result.leaderId) ?? "",
                   result.requiredAverage,
                 )}
-        </p>
+        </div>
       </div>
     </section>
   );

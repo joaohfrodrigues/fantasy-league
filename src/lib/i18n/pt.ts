@@ -183,13 +183,15 @@ export const pt = {
     pathToVictory: "Caminho para a vitória",
     pathToVictorySubtitle: "Uma projeção, não uma garantia.",
     pathToVictoryPlayerLabel: "Jogador",
-    pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de te apanhar.`,
-    pathToVictoryLeadingSolo: "Ainda não há mais ninguém na liga para te perseguir.",
-    pathToVictoryChasing: (name: string, avg: number) =>
-      `Faz uma média de ${Math.round(avg)} pts/ronda nas rondas que faltam para teres 90% de hipóteses de apanhar ${name}.`,
-    pathToVictoryImpossible: (name: string) =>
-      `A diferença é grande demais para fechar — nem uma série perfeita chegaria para apanhar ${name}.`,
+    // Os sufixos seguem o <select> do jogador escolhido, inline numa frase
+    // (ex.: "<Sofia> precisa de uma média..."), por isso começam a meio da frase.
+    pathToVictoryChasingSuffix: (name: string, avg: number) =>
+      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de apanhar ${name}.`,
+    pathToVictoryLeadingSuffix: (name: string, avg: number) =>
+      ` lidera com folga suficiente: ${name} precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de recuperar a liderança.`,
+    pathToVictoryLeadingSoloSuffix: " ainda não tem perseguidores na liga.",
+    pathToVictoryImpossibleSuffix: (name: string) =>
+      ` não consegue fechar a diferença — nem uma série perfeita chegaria para apanhar ${name}.`,
     pathToVictoryInfoTitle: "Como é calculado",
     pathToVictoryInfoSubtitle: "Porquê 90%, e não uma garantia",
     pathToVictoryInfoBody1bold: "Simulado, não adivinhado:",

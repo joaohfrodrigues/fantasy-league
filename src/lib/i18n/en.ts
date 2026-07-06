@@ -180,13 +180,15 @@ export const en: Dict = {
     pathToVictory: "Path to victory",
     pathToVictorySubtitle: "A projection, not a guarantee.",
     pathToVictoryPlayerLabel: "Player",
-    pathToVictoryLeading: (name: string, avg: number) =>
-      `${name} needs to average ${Math.round(avg)} pts/round for a 90% chance of catching you.`,
-    pathToVictoryLeadingSolo: "No one else in the league to chase you yet.",
-    pathToVictoryChasing: (name: string, avg: number) =>
-      `Average ${Math.round(avg)} pts/round over the rounds left for a 90% chance of catching ${name}.`,
-    pathToVictoryImpossible: (name: string) =>
-      `The gap is too big to close — even a flawless run wouldn't catch ${name}.`,
+    // Suffixes follow the selected-player <select> inline in a sentence
+    // (e.g. "<Sofia> needs to average..."), so each starts mid-sentence.
+    pathToVictoryChasingSuffix: (name: string, avg: number) =>
+      ` needs to average ${Math.round(avg)} pts/round for a 90% chance of catching ${name}.`,
+    pathToVictoryLeadingSuffix: (name: string, avg: number) =>
+      `'s lead means ${name} needs to average ${Math.round(avg)} pts/round for a 90% chance of catching up.`,
+    pathToVictoryLeadingSoloSuffix: " has no one else in the league to chase them yet.",
+    pathToVictoryImpossibleSuffix: (name: string) =>
+      ` can't close the gap — even a flawless run wouldn't catch ${name}.`,
     pathToVictoryInfoTitle: "How it's calculated",
     pathToVictoryInfoSubtitle: "Why 90%, not a guarantee",
     pathToVictoryInfoBody1bold: "Simulated, not guessed:",
