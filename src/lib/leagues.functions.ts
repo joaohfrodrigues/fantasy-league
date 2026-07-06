@@ -905,9 +905,8 @@ export const lockRound = createServerFn({ method: "POST" })
     password: String(data?.password ?? ""),
     roundId: clean(data?.roundId),
   }))
-  .handler(
-    async ({ data }): Promise<{ ok: true }> =>
-      setRoundLock(data.slug, data.password, data.roundId, true),
+  .handler(async ({ data }): Promise<{ ok: true }> =>
+    setRoundLock(data.slug, data.password, data.roundId, true),
   );
 
 export const unlockRound = createServerFn({ method: "POST" })
@@ -916,9 +915,8 @@ export const unlockRound = createServerFn({ method: "POST" })
     password: String(data?.password ?? ""),
     roundId: clean(data?.roundId),
   }))
-  .handler(
-    async ({ data }): Promise<{ ok: true }> =>
-      setRoundLock(data.slug, data.password, data.roundId, false),
+  .handler(async ({ data }): Promise<{ ok: true }> =>
+    setRoundLock(data.slug, data.password, data.roundId, false),
   );
 
 // --- League tie-break rule -----------------------------------------------------
