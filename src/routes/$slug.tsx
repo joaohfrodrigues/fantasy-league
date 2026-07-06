@@ -2308,30 +2308,36 @@ function H2HPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-4">
-          <select
-            value={playerAId ?? ""}
-            onChange={(e) => setPlayerAId(e.target.value || null)}
-            aria-label={t.board.h2hPlayerA}
-            className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-          >
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={playerBId ?? ""}
-            onChange={(e) => setPlayerBId(e.target.value || null)}
-            aria-label={t.board.h2hPlayerB}
-            className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-          >
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Select value={playerAId ?? undefined} onValueChange={setPlayerAId}>
+            <SelectTrigger
+              aria-label={t.board.h2hPlayerA}
+              className="w-full h-auto justify-center gap-1 p-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-lg"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={playerBId ?? undefined} onValueChange={setPlayerBId}>
+            <SelectTrigger
+              aria-label={t.board.h2hPlayerB}
+              className="w-full h-auto justify-center gap-1 p-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-lg"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {samePlayer && (
@@ -2547,7 +2553,7 @@ function PathToVictoryPanel({
           <Select value={subjectId} onValueChange={setSubjectOverride}>
             <SelectTrigger
               aria-label={t.board.pathToVictoryPlayerLabel}
-              className="inline-flex w-auto h-auto gap-1 p-0 m-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground"
+              className="inline-flex w-auto h-auto gap-1 p-0 m-0 border-none shadow-none bg-transparent font-bold underline decoration-2 underline-offset-2 text-foreground text-base"
             >
               <SelectValue />
             </SelectTrigger>
