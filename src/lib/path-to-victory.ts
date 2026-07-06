@@ -163,9 +163,11 @@ function requiredAverageToCatch(params: {
 /**
  * The per-round average a chasing player needs to have a 90% chance of
  * catching the league leader — or, when the subject is already leading, the
- * same-confidence buffer their nearest chaser needs. Rounds remaining =
- * unlocked rounds (locked rounds are banked into each player's total).
- * Suppressed (`no-rounds-left`) once every round is locked.
+ * average they themselves need to keep a 90% chance of winning outright
+ * (benchmarked against their nearest chaser's own upside, not a fixed
+ * target). Rounds remaining = unlocked rounds (locked rounds are banked into
+ * each player's total). Suppressed (`no-rounds-left`) once every round is
+ * locked.
  */
 export function computePathToVictory(params: {
   players: { id: string }[];
@@ -187,10 +189,15 @@ export function computePathToVictory(params: {
 
   if (subjectId === leaderId) {
     const chaserId = [...ranks.entries()].find(([, r]) => r === 2)?.[0] ?? null;
-    if (!chaserId) return { status: "leading", requiredAverage: Infinity, chaserId: null };
+    // No one else in the league: any average, however low, still wins.
+    if (!chaserId) return { status: "leading", requiredAverage: 0, chaserId: null };
+    // Project the CHASER's upside (their own 90th-percentile finish) and
+    // solve for what the leader needs to average to stay clear of it — the
+    // leader's own required average for a 90% win chance, not the chaser's
+    // required average to catch up.
     const requiredAverage = requiredAverageToCatch({
-      targetId: subjectId,
-      chaserTotal: totalOf(chaserId),
+      targetId: chaserId,
+      chaserTotal: totalOf(subjectId),
       players,
       rounds,
       score,

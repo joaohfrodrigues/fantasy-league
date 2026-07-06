@@ -83,7 +83,7 @@ describe("computePathToVictory", () => {
     expect(result.impossible).toBe(true);
   });
 
-  it("reports the nearest chaser's required average as the leader's buffer", () => {
+  it("computes the leader's own required average for a 90% win chance, benchmarked against the chaser's upside", () => {
     const score = lookup({ "a:r1": 50, "a:r2": 50, "b:r1": 40, "b:r2": 30 });
     const result = computePathToVictory({
       players,
@@ -101,7 +101,7 @@ describe("computePathToVictory", () => {
     expect(result.requiredAverage).toBeGreaterThan(0);
   });
 
-  it("returns an infinite buffer when the leader has no chaser (solo league)", () => {
+  it("requires no average at all when the leader has no chaser (solo league)", () => {
     const result = computePathToVictory({
       players: [{ id: "a" }],
       rounds,
@@ -109,7 +109,36 @@ describe("computePathToVictory", () => {
       ranks: new Map([["a", 1]]),
       subjectId: "a",
     });
-    expect(result).toEqual({ status: "leading", requiredAverage: Infinity, chaserId: null });
+    expect(result).toEqual({ status: "leading", requiredAverage: 0, chaserId: null });
+  });
+
+  it("raises the leader's required average when the chaser has more upside, even with an identical current gap", () => {
+    // Leader "a" 100, chaser "b" 70 in both leagues — same 30pt gap. In the
+    // volatile league "b"'s own scores swing wildly, giving them more upside
+    // in their 90th-percentile finish, so "a" needs a higher average to stay
+    // clear of it than in the stable league.
+    const ranks = new Map([
+      ["a", 1],
+      ["b", 2],
+    ]);
+    const stable = computePathToVictory({
+      players,
+      rounds,
+      score: lookup({ "a:r1": 50, "a:r2": 50, "b:r1": 35, "b:r2": 35 }),
+      ranks,
+      subjectId: "a",
+    });
+    const volatile = computePathToVictory({
+      players,
+      rounds,
+      score: lookup({ "a:r1": 50, "a:r2": 50, "b:r1": 65, "b:r2": 5 }),
+      ranks,
+      subjectId: "a",
+    });
+    if (stable.status !== "leading" || volatile.status !== "leading") {
+      throw new Error("expected leading");
+    }
+    expect(volatile.requiredAverage).toBeGreaterThan(stable.requiredAverage);
   });
 
   it("widens the required average for a more volatile league than a stable one with identical totals", () => {

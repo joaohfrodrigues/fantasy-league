@@ -184,14 +184,18 @@ export const pt = {
     pathToVictorySubtitle: "Uma projeção, não uma garantia.",
     pathToVictoryPlayerLabel: "Jogador",
     // Os sufixos seguem o <select> do jogador escolhido, inline numa frase
-    // (ex.: "<Sofia> precisa de uma média..."), por isso começam a meio da frase.
+    // (ex.: "<Sofia> precisa de uma média..."), por isso começam a meio da
+    // frase. Verbos/preposições escolhidos de propósito para soarem naturais
+    // sem artigo antes do nome (evita ter de adivinhar o género do jogador):
+    // "alcançar" e "vantagem sobre", em vez de "apanhar"/"à frente de", que
+    // pedem naturalmente "a"/"o" antes do nome (ex.: "apanhar a Sofia").
     pathToVictoryChasingSuffix: (name: string, avg: number) =>
-      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de apanhar ${name}.`,
+      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de alcançar ${name}.`,
     pathToVictoryLeadingSuffix: (name: string, avg: number) =>
-      ` lidera com folga suficiente: ${name} precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de recuperar a liderança.`,
+      ` precisa de uma média de ${Math.round(avg)} pts/ronda para ter 90% de hipóteses de manter a vantagem sobre ${name}.`,
     pathToVictoryLeadingSoloSuffix: " ainda não tem perseguidores na liga.",
     pathToVictoryImpossibleSuffix: (name: string) =>
-      ` não consegue fechar a diferença — nem uma série perfeita chegaria para apanhar ${name}.`,
+      ` não consegue fechar a diferença — nem uma série perfeita chegaria para alcançar ${name}.`,
     pathToVictoryInfoTitle: "Como é calculado",
     pathToVictoryInfoSubtitle: "Porquê 90%, e não uma garantia",
     pathToVictoryInfoBody1bold: "Simulado, não adivinhado:",
@@ -362,6 +366,8 @@ export const pt = {
     clearScore: "Limpar pontos",
 
     afterRound: (name: string) => `Após ${name}`,
+    banterPrevRound: "Resumo da ronda anterior",
+    banterNextRound: "Resumo da ronda seguinte",
 
     claimRow: "Sou eu",
     unclaimRow: "Não sou eu",

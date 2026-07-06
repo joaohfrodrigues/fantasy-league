@@ -185,7 +185,7 @@ export const en: Dict = {
     pathToVictoryChasingSuffix: (name: string, avg: number) =>
       ` needs to average ${Math.round(avg)} pts/round for a 90% chance of catching ${name}.`,
     pathToVictoryLeadingSuffix: (name: string, avg: number) =>
-      `'s lead means ${name} needs to average ${Math.round(avg)} pts/round for a 90% chance of catching up.`,
+      ` needs to average ${Math.round(avg)} pts/round for a 90% chance of staying ahead of ${name}.`,
     pathToVictoryLeadingSoloSuffix: " has no one else in the league to chase them yet.",
     pathToVictoryImpossibleSuffix: (name: string) =>
       ` can't close the gap — even a flawless run wouldn't catch ${name}.`,
@@ -355,6 +355,8 @@ export const en: Dict = {
     clearScore: "Clear score",
 
     afterRound: (name: string) => `After ${name}`,
+    banterPrevRound: "Previous round summary",
+    banterNextRound: "Next round summary",
 
     claimRow: "This is me",
     unclaimRow: "Not me",

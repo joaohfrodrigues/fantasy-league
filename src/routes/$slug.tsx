@@ -30,6 +30,8 @@ import {
   Sparkles,
   Shuffle,
   Target,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Drawer, DrawerTrigger, DrawerContent, DrawerClose } from "@/components/ui/drawer";
 import {
@@ -170,7 +172,7 @@ function LeagueBoard() {
   // so it needs its own open state to avoid both instances opening the portal.
   const [mobileRoundPrizePickerFor, setMobileRoundPrizePickerFor] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [showH2H, setShowH2H] = useState(false);
+  const [h2hOpen, setH2hOpen] = useState(false);
   const [claimedPlayerId, setClaimedPlayerId] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -433,15 +435,23 @@ function LeagueBoard() {
     return withRank;
   }, [baseStandings, roundIndexById, sortKey, sortDir, lockedWinsByPlayer, scoreOf]);
 
-  // Most recently locked round that has a generated summary, in the current locale.
-  const latestSummary = useMemo(() => {
+  // Every locked round with a generated summary, in the current locale,
+  // newest first — lets the banter card page back through past rounds.
+  const summarizedRounds = useMemo(() => {
     const pick = (r: Round) => (locale === "pt" ? r.summary_pt : r.summary_en) ?? r.summary_en;
-    const locked = rounds
+    return rounds
       .filter((r) => r.locked_at !== null && pick(r))
-      .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime());
-    const round = locked[0];
-    return round ? { name: round.name, text: pick(round)! } : null;
+      .sort((a, b) => new Date(b.locked_at!).getTime() - new Date(a.locked_at!).getTime())
+      .map((r) => ({ name: r.name, text: pick(r)! }));
   }, [rounds, locale]);
+
+  // 0 = most recent round's summary. Snaps back to the latest whenever the
+  // number of summarized rounds changes (a new round just locked).
+  const [summaryIndex, setSummaryIndex] = useState(0);
+  useEffect(() => {
+    setSummaryIndex(0);
+  }, [summarizedRounds.length]);
+  const shownSummary = summarizedRounds[Math.min(summaryIndex, summarizedRounds.length - 1)];
 
   const stats = useMemo(() => {
     let high: { value: number; player: string; round: string } | null = null;
@@ -1070,13 +1080,39 @@ function LeagueBoard() {
         <p className="text-xs text-muted-foreground/70 mt-3 max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
           {t.board.heroFootnote}
         </p>
-        {latestSummary && (
+        {shownSummary && (
           <div className="mt-8 rounded-xl border-l-2 border-pitch bg-surface-elevated/40 pl-5 pr-5 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-[400ms] fill-mode-both">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch mb-2">
-              <Sparkles className="size-3.5" aria-hidden="true" />
-              {t.board.afterRound(latestSummary.name)}
-            </p>
-            <p className="text-sm text-foreground/80 leading-relaxed">{latestSummary.text}</p>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-pitch">
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                {t.board.afterRound(shownSummary.name)}
+              </p>
+              {summarizedRounds.length > 1 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() =>
+                      setSummaryIndex((i) => Math.min(i + 1, summarizedRounds.length - 1))
+                    }
+                    disabled={summaryIndex >= summarizedRounds.length - 1}
+                    aria-label={t.board.banterPrevRound}
+                    title={t.board.banterPrevRound}
+                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setSummaryIndex((i) => Math.max(i - 1, 0))}
+                    disabled={summaryIndex === 0}
+                    aria-label={t.board.banterNextRound}
+                    title={t.board.banterNextRound}
+                    className="inline-flex items-center justify-center size-6 rounded-md text-pitch hover:bg-pitch/15 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-sm text-foreground/80 leading-relaxed">{shownSummary.text}</p>
           </div>
         )}
       </section>
@@ -1149,6 +1185,17 @@ function LeagueBoard() {
         </section>
       )}
 
+      {h2hOpen && players.length >= 2 && (
+        <H2HPanel
+          players={players}
+          rounds={rounds}
+          scoreMap={scoreMap}
+          standings={baseStandings}
+          claimedPlayerId={claimedPlayerId}
+          onClose={() => setH2hOpen(false)}
+        />
+      )}
+
       {claimedPlayerId && (
         <PathToVictoryPanel
           players={players}
@@ -1195,8 +1242,12 @@ function LeagueBoard() {
                 )}
                 {players.length >= 2 && (
                   <button
-                    onClick={() => setShowH2H(true)}
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-sky-400/60 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30 transition-colors"
+                    onClick={() => setH2hOpen((open) => !open)}
+                    className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+                      h2hOpen
+                        ? "bg-sky-500 text-white shadow-sm hover:bg-sky-500/90"
+                        : "border border-sky-400/60 text-sky-300 bg-sky-500/20 hover:bg-sky-500/30"
+                    }`}
                     title={t.board.h2hTitle}
                   >
                     <Swords className="size-3.5" />
@@ -1427,17 +1478,6 @@ function LeagueBoard() {
           rounds={rounds}
           onClose={() => setShowHistory(false)}
           onAuthFailure={handleAuthFailure}
-        />
-      )}
-
-      {showH2H && (
-        <H2HModal
-          players={players}
-          rounds={rounds}
-          scoreMap={scoreMap}
-          standings={baseStandings}
-          claimedPlayerId={claimedPlayerId}
-          onClose={() => setShowH2H(false)}
         />
       )}
 
@@ -2191,7 +2231,7 @@ function HistoryModal({
   );
 }
 
-function H2HModal({
+function H2HPanel({
   players,
   rounds,
   scoreMap,
@@ -2243,97 +2283,119 @@ function H2HModal({
   }, [playerAId, playerBId, samePlayer, lockedRounds, score]);
 
   return (
-    <Modal onClose={onClose} title={t.board.h2hTitle}>
-      <p className="text-xs text-muted-foreground -mt-3 mb-4">{t.board.h2hSubtitle}</p>
-
-      <div className="grid grid-cols-2 gap-3">
-        <select
-          value={playerAId ?? ""}
-          onChange={(e) => setPlayerAId(e.target.value || null)}
-          aria-label={t.board.h2hPlayerA}
-          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-        >
-          {players.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={playerBId ?? ""}
-          onChange={(e) => setPlayerBId(e.target.value || null)}
-          aria-label={t.board.h2hPlayerB}
-          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
-        >
-          {players.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {samePlayer && (
-        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hPickTwo}</p>
-      )}
-
-      {!samePlayer && lockedRounds.length === 0 && (
-        <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hNoRounds}</p>
-      )}
-
-      {!samePlayer && summary && summary.rounds.length > 0 && (
-        <div className="mt-5">
-          <div className="text-center">
-            <div className="font-display text-2xl font-semibold">
-              {t.board.h2hRecord(summary.aWins, summary.bWins, summary.draws)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t.board.h2hRoundsCompared(summary.rounds.length)}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between mt-4 px-1">
+    <section className="max-w-6xl mx-auto px-6 pb-2">
+      <div className="rounded-2xl border p-5 animate-in fade-in slide-in-from-top-2 duration-300 border-sky-500/40 bg-sky-500/5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <span className="grid place-items-center size-9 rounded-xl shrink-0 bg-sky-500/15 text-sky-400">
+              <Swords className="size-4" />
+            </span>
             <div>
-              <div className="text-xs text-muted-foreground">{playerById.get(playerAId!)}</div>
-              <div className="font-display text-xl font-semibold tabular-nums">
-                {summary.aTotal}
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              {t.board.h2hTotalPoints}
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-muted-foreground">{playerById.get(playerBId!)}</div>
-              <div className="font-display text-xl font-semibold tabular-nums">
-                {summary.bTotal}
-              </div>
+              <h2 className="font-display text-lg font-semibold">{t.board.h2hTitle}</h2>
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 max-w-md">
+                {t.board.h2hSubtitle}
+              </p>
             </div>
           </div>
-
-          <ul className="max-h-[40vh] overflow-y-auto mt-5 -mx-1 px-1 divide-y divide-border/40">
-            {summary.rounds.map((r) => (
-              <li key={r.roundId} className="flex items-center justify-between gap-3 py-2.5">
-                <span className="text-sm">{roundLabelById.get(r.roundId) ?? r.roundId}</span>
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  {r.aScore} – {r.bScore}
-                </span>
-                <span
-                  className={`text-xs font-medium tabular-nums w-16 text-right ${
-                    r.winner === "a"
-                      ? "text-pitch"
-                      : r.winner === "b"
-                        ? "text-[color:oklch(0.7_0.2_25)]"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {r.winner === "draw" ? t.board.h2hDraw : `${r.delta > 0 ? "+" : ""}${r.delta}`}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <button
+            onClick={onClose}
+            title={t.common.close}
+            aria-label={t.common.close}
+            className="inline-flex items-center justify-center size-8 rounded-md transition-colors bg-sky-500/15 text-sky-400 hover:bg-sky-500/25"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
-      )}
-    </Modal>
+
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <select
+            value={playerAId ?? ""}
+            onChange={(e) => setPlayerAId(e.target.value || null)}
+            aria-label={t.board.h2hPlayerA}
+            className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
+          >
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={playerBId ?? ""}
+            onChange={(e) => setPlayerBId(e.target.value || null)}
+            aria-label={t.board.h2hPlayerB}
+            className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm"
+          >
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {samePlayer && (
+          <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hPickTwo}</p>
+        )}
+
+        {!samePlayer && lockedRounds.length === 0 && (
+          <p className="text-sm text-muted-foreground py-6 text-center">{t.board.h2hNoRounds}</p>
+        )}
+
+        {!samePlayer && summary && summary.rounds.length > 0 && (
+          <div className="mt-5">
+            <div className="text-center">
+              <div className="font-display text-2xl font-semibold">
+                {t.board.h2hRecord(summary.aWins, summary.bWins, summary.draws)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t.board.h2hRoundsCompared(summary.rounds.length)}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between mt-4 px-1">
+              <div>
+                <div className="text-xs text-muted-foreground">{playerById.get(playerAId!)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums">
+                  {summary.aTotal}
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                {t.board.h2hTotalPoints}
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">{playerById.get(playerBId!)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums">
+                  {summary.bTotal}
+                </div>
+              </div>
+            </div>
+
+            <ul className="max-h-[40vh] overflow-y-auto mt-5 -mx-1 px-1 divide-y divide-border/40">
+              {summary.rounds.map((r) => (
+                <li key={r.roundId} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="text-sm">{roundLabelById.get(r.roundId) ?? r.roundId}</span>
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {r.aScore} – {r.bScore}
+                  </span>
+                  <span
+                    className={`text-xs font-medium tabular-nums w-16 text-right ${
+                      r.winner === "a"
+                        ? "text-pitch"
+                        : r.winner === "b"
+                          ? "text-[color:oklch(0.7_0.2_25)]"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {r.winner === "draw" ? t.board.h2hDraw : `${r.delta > 0 ? "+" : ""}${r.delta}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
