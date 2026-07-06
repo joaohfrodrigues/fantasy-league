@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronDown, ChevronsUpDown, ChevronUp, Lock, Pencil } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, ChevronUp, Lock, Pencil, Share2 } from "lucide-react";
 
 // Presentational standings table shared by the live league board ($slug.tsx)
 // and the landing-page example (ExampleBoard.tsx). Both surfaces must render
@@ -72,6 +72,11 @@ export interface StandingsTableProps {
    * separate row of per-round buttons above the table. */
   onEditRound?: (columnId: string) => void;
   editRoundTitle?: (columnId: string) => string;
+  /** When set, every locked round's header gets a share-recap shortcut —
+   * independent of onEditRound, so it's visible to every visitor, not just
+   * whoever can edit scores. */
+  onShareRound?: (columnId: string) => void;
+  shareRoundTitle?: (columnId: string) => string;
 }
 
 export function StandingsTable({
@@ -85,6 +90,8 @@ export function StandingsTable({
   scoreCellTextClassName = "text-xs lg:text-sm",
   onEditRound,
   editRoundTitle,
+  onShareRound,
+  shareRoundTitle,
 }: StandingsTableProps) {
   return (
     <div className="overflow-x-auto">
@@ -128,6 +135,16 @@ export function StandingsTable({
                       className="hidden md:inline-flex text-muted-foreground/70 hover:text-foreground transition-colors"
                     >
                       <Pencil className="size-2.5" aria-hidden="true" />
+                    </button>
+                  )}
+                  {onShareRound && c.locked && (
+                    <button
+                      type="button"
+                      onClick={() => onShareRound(c.id)}
+                      title={shareRoundTitle?.(c.id)}
+                      className="hidden md:inline-flex text-muted-foreground/70 hover:text-foreground transition-colors"
+                    >
+                      <Share2 className="size-2.5" aria-hidden="true" />
                     </button>
                   )}
                 </span>

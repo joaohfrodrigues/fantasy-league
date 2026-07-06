@@ -16,6 +16,7 @@ import { computeRecordMetrics } from "./badges";
 import { toSimRound } from "./simulation";
 import { computeLiveMetrics } from "./league-metrics";
 import type { PlayerRow } from "./leagues.functions";
+import type { TiebreakMode } from "./standings";
 
 export async function handleOgRequest(pathname: string): Promise<Response | null> {
   const ogMatch = pathname.match(/^\/api\/og\/([^/]+)$/);
@@ -39,47 +40,59 @@ async function fetchDb() {
 async function generateLeagueOgImage(slug: string): Promise<Response> {
   try {
     const db = await fetchDb();
-    const { data: lg } = await db.from("leagues").select("id, name").eq("slug", slug).maybeSingle();
+    const { data: lg } = await db
+      .from("leagues")
+      .select("id, name, tiebreak")
+      .eq("slug", slug)
+      .maybeSingle();
 
     const leagueName = lg?.name ?? "Fantasy League";
-    let top3: { name: string; total: number; rank: number }[] = [];
+    let top3: { name: string; total: number; rank: number; prob: number }[] = [];
     let roundsPlayed = 0;
     let totalRounds = 0;
     let playerCount = 0;
 
     if (lg) {
       const [{ data: rounds }, { data: players }] = await Promise.all([
-        db.from("rounds").select("id").eq("league_id", lg.id).order("display_order"),
+        db
+          .from("rounds")
+          .select("id, short, locked_at")
+          .eq("league_id", lg.id)
+          .order("display_order"),
         db.from("players").select("id, name").eq("league_id", lg.id).order("display_order"),
       ]);
-      totalRounds = (rounds ?? []).length;
-      playerCount = (players ?? []).length;
-      const roundIds = (rounds ?? []).map((r: { id: string }) => r.id);
+      const roundList = (rounds ?? []) as { id: string; short: string; locked_at: string | null }[];
+      const playerList = (players ?? []) as { id: string; name: string }[];
+      totalRounds = roundList.length;
+      playerCount = playerList.length;
+      const roundIds = roundList.map((r) => r.id);
       if (roundIds.length && playerCount) {
         const { data: scores } = await db
           .from("scores")
           .select("player_id, round_id, points")
           .in("round_id", roundIds);
-        const scoreList = (scores ?? []) as {
-          player_id: string;
-          round_id: string;
-          points: number;
-        }[];
+        const scoreList = (scores ?? []) as ScoreRow[];
         if (scoreList.length) {
-          roundsPlayed = new Set(scoreList.map((s) => s.round_id)).size;
-          const totals = new Map<string, number>();
-          const nameMap = new Map<string, string>();
-          (players ?? []).forEach((p: { id: string; name: string }) => {
-            totals.set(p.id, 0);
-            nameMap.set(p.id, p.name);
+          const scoreOf = (pid: string, rid: string) =>
+            scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
+          const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
+          roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
+          const { standings } = computeLiveMetrics({
+            players: playerList,
+            rounds: roundList.map(toSimRound),
+            score: scoreOf,
+            tiebreak: (lg.tiebreak as TiebreakMode) ?? "total",
+            pairs: 500,
           });
-          scoreList.forEach((s) =>
-            totals.set(s.player_id, (totals.get(s.player_id) ?? 0) + s.points),
-          );
-          top3 = Array.from(totals.entries())
-            .sort((a, b) => b[1] - a[1])
+          top3 = standings
+            .sort((a, b) => a.rank - b.rank)
             .slice(0, 3)
-            .map(([pid, total], i) => ({ name: nameMap.get(pid) ?? "", total, rank: i + 1 }));
+            .map((row) => ({
+              name: row.player.name,
+              total: row.agg,
+              rank: row.rank,
+              prob: row.prob,
+            }));
         }
       }
     }
@@ -247,7 +260,7 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
 
 function LeagueOgCard(props: {
   leagueName: string;
-  top3: { name: string; total: number; rank: number }[];
+  top3: { name: string; total: number; rank: number; prob: number }[];
   roundsPlayed: number;
   totalRounds: number;
   playerCount: number;
@@ -256,6 +269,9 @@ function LeagueOgCard(props: {
   const hasData = roundsPlayed > 0 && top3.length > 0;
   const progressPct = totalRounds > 0 ? Math.round((roundsPlayed / totalRounds) * 100) : 0;
   const nameFontSize = leagueName.length > 28 ? "48px" : leagueName.length > 18 ? "56px" : "68px";
+  const playerLabel = `${playerCount} player${playerCount === 1 ? "" : "s"}`;
+  const tagline =
+    totalRounds > 0 ? `${playerLabel} · Round ${roundsPlayed} / ${totalRounds}` : playerLabel;
 
   return h(
     "div",
@@ -324,11 +340,23 @@ function LeagueOgCard(props: {
           fontWeight: 700,
           color: TEXT,
           lineHeight: "1.08",
-          marginBottom: "40px",
+          marginBottom: "12px",
           maxWidth: "1000px",
         },
       },
       leagueName,
+    ),
+    h(
+      "span",
+      {
+        style: {
+          fontSize: "18px",
+          fontWeight: 600,
+          color: MUTED,
+          marginBottom: "32px",
+        },
+      },
+      tagline,
     ),
     // ── standings ────────────────────────────────────────────────────────────
     hasData
@@ -378,15 +406,30 @@ function LeagueOgCard(props: {
                 row.name,
               ),
               h(
-                "span",
-                {
-                  style: {
-                    fontSize: i === 0 ? "18px" : "15px",
-                    fontWeight: 600,
-                    color: i === 0 ? GOLD : MUTED,
+                "div",
+                { style: { display: "flex", alignItems: "baseline", gap: "10px" } },
+                h(
+                  "span",
+                  {
+                    style: {
+                      fontSize: i === 0 ? "18px" : "15px",
+                      fontWeight: 600,
+                      color: i === 0 ? GOLD : MUTED,
+                    },
                   },
-                },
-                `${row.total} pts`,
+                  `${row.total} pts`,
+                ),
+                h(
+                  "span",
+                  {
+                    style: {
+                      fontSize: i === 0 ? "16px" : "14px",
+                      fontWeight: 700,
+                      color: i === 0 ? ACCENT : MUTED,
+                    },
+                  },
+                  `${Math.round(row.prob * 100)}%`,
+                ),
               ),
             ),
           ),
@@ -405,9 +448,7 @@ function LeagueOgCard(props: {
           h(
             "span",
             { style: { fontSize: "16px", color: MUTED, fontWeight: 600 } },
-            playerCount > 0
-              ? `${playerCount} players · ${totalRounds} rounds · Season not started`
-              : "Just getting started",
+            playerCount > 0 ? "Season not started" : "Just getting started",
           ),
         ),
     // ── footer progress bar ──────────────────────────────────────────────────

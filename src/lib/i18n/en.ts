@@ -19,6 +19,8 @@ export const en: Dict = {
     metaTitle: "Fantasy Tracker",
     metaDescription:
       "Track your fantasy leagues round by round — winners, prizes, live odds and your league history.",
+    leagueMetaDescription: (players: number, played: number, total: number) =>
+      `${players} ${players === 1 ? "player" : "players"} · Round ${played} / ${total}`,
     notFoundTitle: "Page not found",
     notFoundBody: "The page you're looking for doesn't exist or has been moved.",
     goHome: "Go home",

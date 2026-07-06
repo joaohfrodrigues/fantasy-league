@@ -7,7 +7,7 @@
 // them would leak the service-role key / hashing code.
 import { createServerFn } from "@tanstack/react-start";
 import type { Json } from "@/integrations/supabase/types";
-import { TIEBREAKS } from "@/lib/standings";
+import { TIEBREAKS, computeRoundMaxes } from "@/lib/standings";
 import { clamp } from "@/lib/utils";
 
 const MAX_NAME = 80;
@@ -1012,6 +1012,63 @@ export const getAuditLog = createServerFn({ method: "POST" })
       changedAt: row.changed_at,
     }));
     return { entries };
+  });
+
+// --- League meta (for route <head> / OG tags) ---------------------------------
+// Public, read-only, no password: the same data is already exposed unauthenticated
+// via the OG image endpoint (see og-middleware.server.ts).
+
+export type LeagueMeta = {
+  name: string;
+  playerCount: number;
+  roundsPlayed: number;
+  totalRounds: number;
+};
+
+export const getLeagueMeta = createServerFn({ method: "GET" })
+  .inputValidator((data: { slug: string }) => ({ slug: clean(data?.slug) }))
+  .handler(async ({ data }): Promise<LeagueMeta | null> => {
+    const admin = await getAdmin();
+    const { data: lg, error: leagueError } = await admin
+      .from("leagues")
+      .select("id, name")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (leagueError) throw new Error("DB_ERROR");
+    if (!lg) return null;
+
+    const [{ data: rounds, error: roundsError }, { data: players, error: playersError }] =
+      await Promise.all([
+        admin.from("rounds").select("id").eq("league_id", lg.id),
+        admin.from("players").select("id").eq("league_id", lg.id),
+      ]);
+    if (roundsError || playersError) throw new Error("DB_ERROR");
+
+    const roundList = rounds ?? [];
+    const playerList = players ?? [];
+    const roundIds = roundList.map((r) => r.id);
+    let roundsPlayed = 0;
+    if (roundIds.length) {
+      const { data: scores, error: scoresError } = await admin
+        .from("scores")
+        .select("player_id, round_id, points")
+        .in("round_id", roundIds);
+      if (scoresError) throw new Error("DB_ERROR");
+      const scoreList = scores ?? [];
+      const scoreOf = (pid: string, rid: string) =>
+        scoreList.find((s) => s.player_id === pid && s.round_id === rid)?.points;
+      // Reuse the same "played" definition standings/OG-image use, rather than a
+      // second hand-rolled one, so this count never drifts from the OG image's.
+      const roundMaxes = computeRoundMaxes(playerList, roundList, scoreOf);
+      roundsPlayed = roundList.filter((r) => roundMaxes.has(r.id)).length;
+    }
+
+    return {
+      name: lg.name,
+      playerCount: playerList.length,
+      roundsPlayed,
+      totalRounds: roundList.length,
+    };
   });
 
 // --- Export / import (JSON snapshot) ------------------------------------------
