@@ -1,16 +1,22 @@
 version: 2
 updates:
-  - package-ecosystem: "bun"
+  # Using "npm" rather than "bun" on purpose: this repo's bunfig.toml sets a 24h
+  # minimumReleaseAge supply-chain cooldown. Dependabot's bun updater always test-resolves
+  # the exact version it's proposing (`bun add pkg@x.y.z`), which that cooldown blocks
+  # outright with no fallback whenever the target happens to be <24h old -- true for some
+  # dependency most weeks. The npm updater edits package.json ranges without invoking bun
+  # or bunfig.toml, so it isn't subject to the cooldown. Trade-off: since there's no
+  # committed package-lock.json, these PRs won't touch bun.lock -- run `bun install`
+  # locally after merging to refresh it.
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
     ignore:
       # Pinned to an exact, frequently-releasing beta version (no `^` range) to match
-      # @lovable.dev/vite-tanstack-config's nitro peer requirement. Its releases are almost
-      # always younger than bunfig.toml's 24h minimumReleaseAge cooldown, and with no version
-      # range to fall back to, `bun install` fails outright during Dependabot's update step.
-      # Bump nitro manually alongside the lovable.dev config package instead.
+      # @lovable.dev/vite-tanstack-config's nitro peer requirement. Bump it manually
+      # alongside the lovable.dev config package instead of via Dependabot.
       - dependency-name: "nitro"
     groups:
       dependencies:
