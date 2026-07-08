@@ -73,6 +73,11 @@ export function PositionEvolutionChart({
 
   const totalPlayers = players.length;
 
+  // Keep all rounds visible with tighter spacing on small screens rather than
+  // forcing horizontal scroll; thin the axis *labels* (not the data/lines) as
+  // round count grows so they don't overlap.
+  const tickInterval = playedRounds.length <= 10 ? 0 : playedRounds.length <= 20 ? 1 : 4;
+
   const highlighted = useMemo(() => {
     const s = new Set(clicked);
     if (claimedPlayerId) s.add(claimedPlayerId);
@@ -148,8 +153,26 @@ export function PositionEvolutionChart({
     (e: React.MouseEvent<HTMLDivElement>) => {
       const nearest = findNearest(e.clientX, e.clientY);
       setHovered(nearest);
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      const container = containerRef.current;
+      const rect = container?.getBoundingClientRect();
+      if (!rect || !container) return;
+      // Position is relative to the container's scrollable content, not its
+      // visible viewport — add the current scroll offset so the tooltip
+      // tracks the cursor correctly once the chart has been scrolled. Clamp
+      // within the visible viewport (a fixed half-width estimate, since
+      // actual tooltip content width isn't known until after render) so it
+      // never renders past the container's edges.
+      const TOOLTIP_HALF_WIDTH = 90;
+      const rawX = e.clientX - rect.left + container.scrollLeft;
+      const minX = container.scrollLeft + TOOLTIP_HALF_WIDTH;
+      const maxX = Math.max(
+        minX,
+        container.scrollLeft + container.clientWidth - TOOLTIP_HALF_WIDTH,
+      );
+      setTooltipPos({
+        x: Math.min(Math.max(rawX, minX), maxX),
+        y: e.clientY - rect.top + container.scrollTop,
+      });
     },
     [findNearest],
   );
@@ -194,7 +217,7 @@ export function PositionEvolutionChart({
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
       >
-        <ChartContainer config={{}} className="aspect-auto h-64 min-w-[480px] cursor-pointer">
+        <ChartContainer config={{}} className="aspect-auto h-64 cursor-pointer">
           <ResponsiveContainer>
             <LineChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: 4 }}>
               <XAxis
@@ -202,7 +225,7 @@ export function PositionEvolutionChart({
                 tickLine={false}
                 axisLine={false}
                 height={24}
-                interval={0}
+                interval={tickInterval}
                 tick={{ fontSize: 11 }}
               />
               <YAxis hide reversed domain={[1, Math.max(totalPlayers, 1)]} allowDecimals={false} />
@@ -277,15 +300,14 @@ export function PositionEvolutionChart({
 
         {hovered && tooltipPos && (
           <div
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs shadow-card whitespace-nowrap"
+            className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs shadow-card whitespace-nowrap"
             style={{ left: tooltipPos.x, top: tooltipPos.y - 12 }}
           >
             {t.board.positionEvolutionTooltip(
               playerName(hovered.playerId),
-              (() => {
-                const r = playedRounds[hovered.roundIndex];
-                return r ? r.short || r.name : "";
-              })(),
+              playedRounds[hovered.roundIndex]?.short ||
+                playedRounds[hovered.roundIndex]?.name ||
+                "",
               (data[hovered.roundIndex]?.[hovered.playerId] as number) ?? 0,
             )}
           </div>
