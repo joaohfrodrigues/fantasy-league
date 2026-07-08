@@ -392,6 +392,12 @@ export const pt = {
     h2hTotalPoints: "Pontos totais",
     h2hRoundsCompared: (n: number) => `${n} ${n === 1 ? "ronda comparada" : "rondas comparadas"}`,
     h2hDraw: "empate",
+
+    positionEvolutionTitle: "Evolução na tabela",
+    positionEvolutionSubtitle: "Clica numa linha para comparar jogadores.",
+    positionEvolutionTooltip: (name: string, round: string, rank: number) =>
+      `${name} — ${round} — #${rank}`,
+    positionEvolutionRemove: (name: string) => `Remover ${name} da comparação`,
   },
 };
 
