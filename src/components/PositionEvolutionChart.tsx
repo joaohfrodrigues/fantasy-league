@@ -212,7 +212,7 @@ export function PositionEvolutionChart({
 
       <div
         ref={containerRef}
-        className="relative mt-4 overflow-x-auto"
+        className="relative mt-4 overflow-x-auto [-webkit-tap-highlight-color:transparent] touch-manipulation"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
