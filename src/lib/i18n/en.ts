@@ -381,5 +381,11 @@ export const en: Dict = {
     h2hTotalPoints: "Total points",
     h2hRoundsCompared: (n: number) => `${n} ${n === 1 ? "round" : "rounds"} compared`,
     h2hDraw: "draw",
+
+    positionEvolutionTitle: "Position evolution",
+    positionEvolutionSubtitle: "Click a line to compare players.",
+    positionEvolutionTooltip: (name: string, round: string, rank: number) =>
+      `${name} — ${round} — #${rank}`,
+    positionEvolutionRemove: (name: string) => `Remove ${name} from comparison`,
   },
 };

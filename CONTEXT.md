@@ -138,6 +138,20 @@ way Alternative Reality's is — an inline panel that appears/disappears above
 Standings, not a popup. See `src/lib/h2h.ts`.
 _Avoid_: H2H as the user-facing label (fine in code/discussion), matchup.
 
+**Position evolution**:
+A line chart of every [[Player]]'s cumulative rank after each played round,
+shown below Standings. Reuses Standings' own ranking (one call per round
+prefix) so it can never disagree with the table above it, and follows
+Alternative Reality's round exclusion when active. A player's line only
+starts at their first-ever scored round (a player who joins mid-tournament
+gets no line before they existed, even though their missing rounds still
+count as 0 in the rank math itself, same as everywhere else). The claimed
+player's line is always highlighted; clicking another player's line adds
+them to the comparison (removable via a chip below the chart), independent
+of Standings — the table itself only ever highlights the claimed row. Purely
+client-side, not persisted. See `src/lib/position-evolution.ts`.
+_Avoid_: rank history, standings chart.
+
 ### History
 
 **Audit log**:

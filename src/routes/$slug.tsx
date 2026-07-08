@@ -80,6 +80,7 @@ import {
   type StandingsRow,
 } from "@/components/StandingsTable";
 import { RoundBanterCard } from "@/components/RoundBanterCard";
+import { PositionEvolutionChart } from "@/components/PositionEvolutionChart";
 import { shareRoundRecap } from "@/lib/share-recap";
 
 export const Route = createFileRoute("/$slug")({
@@ -1410,6 +1411,16 @@ function LeagueBoard() {
               total: t.board.colTotal,
               sortBy: t.board.sortBy,
             }}
+          />
+        </div>
+
+        <div className="mt-6">
+          <PositionEvolutionChart
+            players={players}
+            rounds={altRealityRounds}
+            score={scoreOf}
+            tiebreak={tiebreak}
+            claimedPlayerId={claimedPlayerId}
           />
         </div>
 
