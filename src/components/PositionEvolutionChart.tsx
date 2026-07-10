@@ -185,7 +185,16 @@ export function PositionEvolutionChart({
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const nearest = findNearest(e.clientX, e.clientY);
-      if (nearest) toggleHighlight(nearest.playerId);
+      if (!nearest) return;
+      // Recharts redraws its whole dots layer on every highlight-state change
+      // (not a per-dot DOM patch), which tears down the exact SVG node the
+      // finger is on mid-tap. If that happens within the same event, mobile
+      // browsers can't resolve the tap's native highlight against the
+      // now-gone node and paint it against the chart's bounding box instead.
+      // Deferring the state update lets the tap/click's own handling finish
+      // against the still-present node first.
+      const playerId = nearest.playerId;
+      setTimeout(() => toggleHighlight(playerId), 0);
     },
     [findNearest, toggleHighlight],
   );
@@ -259,14 +268,22 @@ export function PositionEvolutionChart({
                       }
                       const isHovered = hovered?.playerId === p.id && hovered.roundIndex === index;
                       const showNumber = isHighlighted || isHovered;
-                      if (showNumber) {
-                        return (
-                          <g
-                            key={`${p.id}-${index}`}
-                            data-player-id={p.id}
-                            data-round-index={index}
-                          >
-                            <circle cx={cx} cy={cy} r={9} fill={color} />
+                      // Always render the same g > circle structure regardless of
+                      // showNumber — swapping the tapped node's own element type on
+                      // click (e.g. circle -> g) removes it from the DOM mid-gesture,
+                      // which leaves mobile browsers unable to clear that node's tap
+                      // highlight and causes it to render against the whole chart
+                      // instead. Only the <text> label is added/removed as a child.
+                      return (
+                        <g key={`${p.id}-${index}`} data-player-id={p.id} data-round-index={index}>
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={showNumber ? 9 : 2.5}
+                            fill={color}
+                            fillOpacity={showNumber ? 1 : 0.5}
+                          />
+                          {showNumber && (
                             <text
                               x={cx}
                               y={cy}
@@ -278,20 +295,8 @@ export function PositionEvolutionChart({
                             >
                               {rank}
                             </text>
-                          </g>
-                        );
-                      }
-                      return (
-                        <circle
-                          key={`${p.id}-${index}`}
-                          data-player-id={p.id}
-                          data-round-index={index}
-                          cx={cx}
-                          cy={cy}
-                          r={2.5}
-                          fill={color}
-                          fillOpacity={0.5}
-                        />
+                          )}
+                        </g>
                       );
                     }}
                     activeDot={false}
