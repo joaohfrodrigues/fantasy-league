@@ -219,7 +219,11 @@ export function PositionEvolutionChart({
       >
         <ChartContainer config={{}} className="aspect-auto h-64 cursor-pointer">
           <ResponsiveContainer>
-            <LineChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: 4 }}>
+            <LineChart
+              data={data}
+              margin={{ top: 16, right: 12, bottom: 4, left: 4 }}
+              accessibilityLayer={false}
+            >
               <XAxis
                 dataKey="roundLabel"
                 tickLine={false}
