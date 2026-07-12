@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { compareRank, computeRoundMaxes, computeStandings, type ScoreLookup } from "./standings";
+import {
+  compareRank,
+  computeRoundMaxes,
+  computeStandings,
+  orderPlayersForScoreEntry,
+  type ScoreLookup,
+} from "./standings";
 
 const player = (id: string) => ({ id, name: id });
 const rounds = [{ id: "r1" }, { id: "r2" }, { id: "r3" }];
@@ -161,6 +167,61 @@ describe("computeStandings — Alternative Reality (excluded rounds)", () => {
     expect(p2.agg).toBe(60);
     expect(p2.rank).toBe(1);
     expect(p1.rank).toBe(2);
+  });
+});
+
+describe("orderPlayersForScoreEntry", () => {
+  const p1 = player("p1");
+  const p2 = player("p2");
+  const p3 = player("p3");
+  const lockedRounds = [
+    { id: "r1", locked: true },
+    { id: "r2", locked: true },
+  ];
+
+  it("falls back to input (insertion) order when no round is locked", () => {
+    const unlockedRounds = [{ id: "r1", locked: false }];
+    const score = lookup({ "p1:r1": 5, "p2:r1": 90 });
+    const ordered = orderPlayersForScoreEntry({
+      players: [p1, p2],
+      rounds: unlockedRounds,
+      score,
+      tiebreak: "total",
+    });
+    expect(ordered.map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("orders by standings rank computed from locked rounds only", () => {
+    // p2 leads on locked rounds (r1+r2 = 100) even though p1 has a huge score
+    // in the still-unlocked r3 (200) — the unlocked round must not count.
+    const score = lookup({
+      "p1:r1": 10,
+      "p1:r2": 10,
+      "p1:r3": 200,
+      "p2:r1": 50,
+      "p2:r2": 50,
+      "p2:r3": 0,
+    });
+    const rounds = [...lockedRounds, { id: "r3", locked: false }];
+    const ordered = orderPlayersForScoreEntry({
+      players: [p1, p2],
+      rounds,
+      score,
+      tiebreak: "total",
+    });
+    expect(ordered.map((p) => p.id)).toEqual(["p2", "p1"]);
+  });
+
+  it("breaks ties by stable input order", () => {
+    const score = lookup({ "p1:r1": 10, "p2:r1": 10, "p3:r1": 10 });
+    const rounds = [{ id: "r1", locked: true }];
+    const ordered = orderPlayersForScoreEntry({
+      players: [p3, p1, p2],
+      rounds,
+      score,
+      tiebreak: "total",
+    });
+    expect(ordered.map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
   });
 });
 

@@ -102,3 +102,29 @@ export function computeStandings<P extends { id: string }>(params: {
 
   return rows.map((r) => ({ ...r, rank: rankMap.get(r.player.id) ?? 0 }));
 }
+
+/**
+ * Player order for score entry: standings rank frozen to the locked-rounds
+ * record (see CONTEXT.md: Locked round), so the order never shifts while
+ * scores are being entered for an in-progress round. Falls back to the input
+ * (insertion) order before any round is locked, and stably breaks ties by it.
+ */
+export function orderPlayersForScoreEntry<P extends { id: string }>(params: {
+  players: P[];
+  rounds: { id: string; locked?: boolean }[];
+  score: ScoreLookup;
+  tiebreak: TiebreakMode;
+}): P[] {
+  const { players, score, tiebreak } = params;
+  const lockedRounds = params.rounds.filter((r) => r.locked);
+  if (lockedRounds.length === 0) return players;
+
+  const rows = computeStandings({
+    players,
+    rounds: lockedRounds,
+    score,
+    winProbability: new Map(),
+    tiebreak,
+  });
+  return [...rows].sort((a, b) => a.rank - b.rank).map((r) => r.player);
+}
