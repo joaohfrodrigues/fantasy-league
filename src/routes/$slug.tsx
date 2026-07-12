@@ -63,7 +63,13 @@ import { resolveLocale } from "@/lib/locale.functions";
 import { recordRecentLeague } from "@/lib/recent-leagues";
 import { EditableList } from "@/components/EditableList";
 import { toSimRound, SCORE_MIN, SCORE_MAX } from "@/lib/simulation";
-import { computeRoundMaxes, TIEBREAKS, type TiebreakMode, type StandingRow } from "@/lib/standings";
+import {
+  computeRoundMaxes,
+  orderPlayersForScoreEntry,
+  TIEBREAKS,
+  type TiebreakMode,
+  type StandingRow,
+} from "@/lib/standings";
 import { computeH2H } from "@/lib/h2h";
 import { computeLiveMetrics } from "@/lib/league-metrics";
 import { computeRecordMetrics } from "@/lib/badges";
@@ -409,6 +415,20 @@ function LeagueBoard() {
   const { badges: badgesByPlayer, lockedWins: lockedWinsByPlayer } = useMemo(
     () =>
       computeRecordMetrics({
+        players,
+        rounds: roundsWithLock,
+        score: (pid, rid) => scoreMap.get(`${pid}:${rid}`),
+        tiebreak,
+      }),
+    [players, roundsWithLock, scoreMap, tiebreak],
+  );
+
+  // Score-entry row order: standings rank frozen to the locked-rounds record
+  // (see src/lib/standings.ts), so the RoundEditor list doesn't reorder while
+  // scores are being typed in. Same locked-only, non-What-if source as badges.
+  const scoreEntryPlayers = useMemo(
+    () =>
+      orderPlayersForScoreEntry({
         players,
         rounds: roundsWithLock,
         score: (pid, rid) => scoreMap.get(`${pid}:${rid}`),
@@ -1487,7 +1507,7 @@ function LeagueBoard() {
           password={password}
           roundId={editing}
           rounds={rounds}
-          players={players}
+          players={scoreEntryPlayers}
           scoreMap={scoreMap}
           onAuthFailure={handleAuthFailure}
           onClose={() => setEditing(null)}
