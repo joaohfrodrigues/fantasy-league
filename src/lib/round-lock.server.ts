@@ -10,7 +10,9 @@ import { computeRoundMaxes, type ScoreRow } from "./standings";
 import { computeLiveMetrics } from "./league-metrics";
 import { computeRecordMetrics } from "./badges";
 import { toSimRound } from "./simulation";
-import { getBanter, type BanterInput } from "./banter.server";
+import { computePositionEvolution } from "./position-evolution";
+import { computePathToVictory } from "./path-to-victory";
+import { getBanter, type BanterInput, type PersonaId } from "./banter.server";
 
 type RoundRow = {
   id: string;
@@ -20,6 +22,7 @@ type RoundRow = {
   display_order: number;
   summary_en: string | null;
   banter_devices: string[] | null;
+  banter_persona: string | null;
 };
 /**
  * Recompute standings/win-probability/badges for `roundId`'s league, generate
@@ -39,7 +42,9 @@ export async function onRoundLocked(
     admin.from("leagues").select("id, name, tiebreak").eq("id", leagueId).maybeSingle(),
     admin
       .from("rounds")
-      .select("id, name, short, locked_at, display_order, summary_en, banter_devices")
+      .select(
+        "id, name, short, locked_at, display_order, summary_en, banter_devices, banter_persona",
+      )
       .eq("league_id", leagueId)
       .order("display_order"),
     admin
@@ -109,6 +114,70 @@ export async function onRoundLocked(
   const priorDevices = [
     ...new Set(priorPlayedRounds.slice(-10).flatMap((r) => r.banter_devices ?? [])),
   ];
+  const lastPersona = (priorPlayedRounds[priorPlayedRounds.length - 1]?.banter_persona ??
+    null) as PersonaId | null;
+
+  // Position changes: this round's rank vs each player's previous counted round (if any).
+  const positionEvolution = computePositionEvolution({
+    players: playerList,
+    rounds: roundsWithLock,
+    score: scoreOf,
+    tiebreak,
+  });
+  const positionChanges = playerList.flatMap((p) => {
+    const points = positionEvolution.get(p.id) ?? [];
+    const current = points[points.length - 1];
+    const previous = points[points.length - 2];
+    if (!current || !previous || current.roundId !== roundId || current.rank === previous.rank) {
+      return [];
+    }
+    return [{ name: p.name, from: previous.rank, to: current.rank }];
+  });
+
+  // What the leader needs to average per remaining round to stay 90% safe.
+  const ranks = new Map(standings.map((r) => [r.player.id, r.rank]));
+  const leaderId = standings.find((r) => r.rank === 1)?.player.id ?? null;
+  const pathToVictoryResult = leaderId
+    ? computePathToVictory({
+        players: playerList,
+        rounds: roundsWithLock,
+        score: scoreOf,
+        ranks,
+        subjectId: leaderId,
+      })
+    : null;
+  const pathToVictory =
+    pathToVictoryResult?.status === "leading"
+      ? {
+          requiredAverage: pathToVictoryResult.requiredAverage,
+          chaserName: pathToVictoryResult.chaserId
+            ? (playerList.find((p) => p.id === pathToVictoryResult.chaserId)?.name ?? null)
+            : null,
+        }
+      : null;
+
+  // All-time high/low single-round scores across every played round so far, and
+  // whether this round set either record (first occurrence wins ties).
+  let highest: { name: string; points: number; roundName: string } | null = null;
+  let lowest: { name: string; points: number; roundName: string } | null = null;
+  for (const r of playedRounds) {
+    for (const p of playerList) {
+      const pts = scoreOf(p.id, r.id);
+      if (pts === undefined) continue;
+      if (!highest || pts > highest.points)
+        highest = { name: p.name, points: pts, roundName: r.name };
+      if (!lowest || pts < lowest.points) lowest = { name: p.name, points: pts, roundName: r.name };
+    }
+  }
+  const scoreRecords =
+    highest && lowest
+      ? {
+          highest,
+          lowest,
+          newHigh: highest.roundName === targetRound.name,
+          newLow: lowest.roundName === targetRound.name,
+        }
+      : null;
 
   // Detect leader change: compare pre-round leader (by total excluding this round) vs post-round.
   const preRoundLeader = [...standings].sort(
@@ -144,9 +213,13 @@ export async function onRoundLocked(
     leaderChanged,
     priorSummaries,
     priorDevices,
+    lastPersona,
+    positionChanges,
+    pathToVictory,
+    scoreRecords,
   };
 
-  const { en, pt, ai, devices } = await getBanter(input);
+  const { en, pt, ai, devices, persona } = await getBanter(input);
 
   // Bypass strict Supabase schema types until migration is applied and types regenerated.
   type RoundsSummaryUpdate = {
@@ -154,12 +227,18 @@ export async function onRoundLocked(
       summary_en: string | null;
       summary_pt: string | null;
       banter_devices: string[] | null;
+      banter_persona: string | null;
     }): {
       eq(col: string, val: string): Promise<unknown>;
     };
   };
   await (admin.from("rounds") as unknown as RoundsSummaryUpdate)
-    .update({ summary_en: en, summary_pt: pt, banter_devices: devices.length ? devices : null })
+    .update({
+      summary_en: en,
+      summary_pt: pt,
+      banter_devices: devices.length ? devices : null,
+      banter_persona: persona,
+    })
     .eq("id", roundId);
 
   return { usedAi: ai };

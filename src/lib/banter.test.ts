@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { templatedBanter, getBanter, buildPrompt } from "./banter.server";
+import {
+  templatedBanter,
+  getBanter,
+  buildPrompt,
+  pickPersona,
+  pickLengthHint,
+  PERSONAS,
+} from "./banter.server";
 import type { BanterInput } from "./banter.server";
 
 const base: BanterInput = {
@@ -26,6 +33,10 @@ const base: BanterInput = {
   leaderChanged: false,
   priorSummaries: [],
   priorDevices: [],
+  lastPersona: null,
+  positionChanges: [],
+  pathToVictory: null,
+  scoreRecords: null,
 };
 
 afterEach(() => {
@@ -59,6 +70,36 @@ describe("templatedBanter", () => {
     };
     const text = templatedBanter(input, "en");
     expect(text.length).toBeGreaterThan(0);
+  });
+
+  it("picks different phrasing variants depending on the injected random source", () => {
+    const low = templatedBanter(base, "en", () => 0);
+    const high = templatedBanter(base, "en", () => 0.99);
+    expect(low).not.toBe(high);
+    expect(low).toContain("Alice");
+    expect(high).toContain("Alice");
+  });
+});
+
+describe("pickPersona", () => {
+  it("excludes the last-used persona from the pool", () => {
+    for (const persona of PERSONAS) {
+      const picked = pickPersona(persona.id, () => 0.99);
+      expect(picked).not.toBe(persona.id);
+    }
+  });
+
+  it("picks from the full pool when there is no last persona", () => {
+    const picked = pickPersona(null, () => 0);
+    expect(picked).toBe(PERSONAS[0].id);
+  });
+});
+
+describe("pickLengthHint", () => {
+  it("returns one of the defined length hints", () => {
+    const hint = pickLengthHint(() => 0.5);
+    expect(typeof hint).toBe("string");
+    expect(hint.length).toBeGreaterThan(0);
   });
 });
 
@@ -181,6 +222,61 @@ describe("buildPrompt", () => {
   it("omits devices section when none are given", () => {
     const prompt = buildPrompt(base);
     expect(prompt).not.toContain("already used");
+  });
+
+  it("includes position changes when present", () => {
+    const prompt = buildPrompt({
+      ...base,
+      positionChanges: [{ name: "Carlos", from: 3, to: 1 }],
+    });
+    expect(prompt).toContain("Carlos climbed from #3 to #1");
+  });
+
+  it("omits position changes section when none are given", () => {
+    const prompt = buildPrompt(base);
+    expect(prompt).not.toContain("position changes");
+  });
+
+  it("includes the path-to-victory target when present", () => {
+    const prompt = buildPrompt({
+      ...base,
+      pathToVictory: { requiredAverage: 42.4, chaserName: "Bob" },
+    });
+    expect(prompt).toContain("Alice needs to average at least 42 points per remaining round");
+    expect(prompt).toContain("Bob's pace");
+  });
+
+  it("omits the path-to-victory note when null", () => {
+    const prompt = buildPrompt(base);
+    expect(prompt).not.toContain("needs to average");
+  });
+
+  it("includes a new all-time high/low score note when flagged", () => {
+    const prompt = buildPrompt({
+      ...base,
+      scoreRecords: {
+        highest: { name: "Alice", points: 99, roundName: "Round 3" },
+        lowest: { name: "Carlos", points: 5, roundName: "Round 1" },
+        newHigh: true,
+        newLow: false,
+      },
+    });
+    expect(prompt).toContain("Alice's 99 this round is a new all-time high score");
+    expect(prompt).not.toContain("new all-time low score");
+  });
+
+  it("omits the record note when neither record was broken this round", () => {
+    const prompt = buildPrompt({
+      ...base,
+      scoreRecords: {
+        highest: { name: "Alice", points: 99, roundName: "Round 1" },
+        lowest: { name: "Carlos", points: 5, roundName: "Round 1" },
+        newHigh: false,
+        newLow: false,
+      },
+    });
+    expect(prompt).not.toContain("all-time high");
+    expect(prompt).not.toContain("all-time low");
   });
 });
 
@@ -356,13 +452,14 @@ describe("getBanter", () => {
       pt: "Análise injetada.",
       devices: ["prize-mention"],
     });
-    const result = await getBanter(base, fakeCaller);
+    const result = await getBanter(base, fakeCaller, () => 0);
     expect(fakeCaller).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       en: "Injected take.",
       pt: "Análise injetada.",
       ai: true,
       devices: ["prize-mention"],
+      persona: "ruthless-pundit",
     });
   });
 
@@ -371,6 +468,17 @@ describe("getBanter", () => {
     const result = await getBanter(base, fakeCaller);
     expect(result.ai).toBe(false);
     expect(result.en.length).toBeGreaterThan(0);
+    expect(result.persona).toBeNull();
+  });
+
+  it("passes a persona voice and length hint to the Gemini caller, excluding lastPersona", async () => {
+    const fakeCaller = vi.fn().mockResolvedValue({ en: "x", pt: "y", devices: [] });
+    await getBanter({ ...base, lastPersona: "ruthless-pundit" }, fakeCaller, () => 0);
+
+    const [, voice] = fakeCaller.mock.calls[0];
+    expect(voice.personaVoice).not.toContain("ruthless fantasy football pundit");
+    expect(typeof voice.lengthHint).toBe("string");
+    expect(voice.lengthHint.length).toBeGreaterThan(0);
   });
 
   it("includes prior summaries and devices in the Gemini prompt when present", async () => {
