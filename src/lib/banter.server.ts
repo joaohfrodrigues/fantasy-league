@@ -36,11 +36,135 @@ export type BanterInput = {
   priorSummaries: string[];
   /** Narrative devices (short tags) self-reported by prior AI generations — steers structural variety. */
   priorDevices: string[];
+  /** Persona used for the most recently played round's AI banter, if any — excluded from this round's persona pick. */
+  lastPersona: PersonaId | null;
+  /** Players whose league rank changed between their previous counted round and this one. */
+  positionChanges: { name: string; from: number; to: number }[];
+  /** What the league leader needs to average per remaining round to keep a 90% chance of winning outright; null once every round is locked or the league has only one player. */
+  pathToVictory: { requiredAverage: number; chaserName: string | null } | null;
+  /** All-time high/low single-round scores across every played round so far (including this one), and whether this round set either record. */
+  scoreRecords: {
+    highest: { name: string; points: number; roundName: string };
+    lowest: { name: string; points: number; roundName: string };
+    newHigh: boolean;
+    newLow: boolean;
+  } | null;
 };
 
 export type BanterLocale = "en" | "pt";
 
-export function templatedBanter(input: BanterInput, locale: BanterLocale): string {
+const FALLBACK_TEMPLATES: Record<
+  BanterLocale,
+  {
+    onFireWinner: ((p: string) => string)[];
+    winner: ((p: string, r: string) => string)[];
+    bottler: ((p: string) => string)[];
+    lastPlace: ((p: string) => string)[];
+    leaderRemaining: ((p: string, n: number) => string)[];
+    leaderDone: ((p: string) => string)[];
+    ghost: ((p: string) => string)[];
+    fallback: ((r: string) => string)[];
+  }
+> = {
+  en: {
+    onFireWinner: [
+      (p) => `${p} is absolutely on fire — back-to-back rounds dominated.`,
+      (p) => `${p} is unstoppable right now — another round, another statement.`,
+      (p) => `${p} just won't stop winning — this is starting to look inevitable.`,
+    ],
+    winner: [
+      (p, r) => `${p} takes ${r} — clean result, no arguments.`,
+      (p, r) => `${p} claims ${r} — straightforward, no drama.`,
+      (p, r) => `${p} walks away with ${r} — job done.`,
+    ],
+    bottler: [
+      (p) => `${p} is in freefall — someone call a rescue team.`,
+      (p) => `${p} is cratering fast — this is turning into a horror show.`,
+      (p) => `${p} can't buy a good round right now — the wheels are off.`,
+    ],
+    lastPlace: [
+      (p) => `${p} at the bottom — dinner's looking expensive from here.`,
+      (p) => `${p} props up the table — someone's paying for drinks.`,
+      (p) => `${p} is rock bottom — the view from last place isn't pretty.`,
+    ],
+    leaderRemaining: [
+      (p, n) => `${p} leads with ${n} round${n === 1 ? "" : "s"} left — not safe yet.`,
+      (p, n) => `${p} is out front with ${n} round${n === 1 ? "" : "s"} to go — nothing's decided.`,
+      (p, n) =>
+        `${p} holds top spot with ${n} round${n === 1 ? "" : "s"} remaining — still all to play for.`,
+    ],
+    leaderDone: [
+      (p) => `${p} wins the prize — well played.`,
+      (p) => `${p} takes the title — fully deserved.`,
+      (p) => `${p} seals it — game over, well earned.`,
+    ],
+    ghost: [
+      (p) => `${p} hasn't scored a point yet. Remarkable commitment to losing.`,
+      (p) => `${p} is still stuck on zero. Impressive dedication to the cause.`,
+      (p) => `${p} has yet to trouble the scoreboard. A statement of sorts.`,
+    ],
+    fallback: [
+      (r) => `${r} done. The standings don't lie.`,
+      (r) => `${r} is in the books. The table has spoken.`,
+      (r) => `${r} wraps up. Numbers don't care about feelings.`,
+    ],
+  },
+  pt: {
+    onFireWinner: [
+      (p) => `${p} está a arrasar — rondas seguidas dominadas.`,
+      (p) => `${p} está imparável — mais uma ronda, mais uma afirmação.`,
+      (p) => `${p} não pára de ganhar — isto já parece inevitável.`,
+    ],
+    winner: [
+      (p, r) => `${p} arrecada ${r} — resultado limpo, sem discussão.`,
+      (p, r) => `${p} fica com ${r} — direto, sem drama.`,
+      (p, r) => `${p} leva ${r} — trabalho feito.`,
+    ],
+    bottler: [
+      (p) => `${p} está em queda livre — chamem uma equipa de resgate.`,
+      (p) => `${p} está a afundar-se depressa — isto já é um filme de terror.`,
+      (p) => `${p} não consegue comprar uma boa ronda — as rodas soltaram-se.`,
+    ],
+    lastPlace: [
+      (p) => `${p} na cauda — o jantar está a ficar caro a partir daqui.`,
+      (p) => `${p} sustenta a tabela — alguém vai pagar as bebidas.`,
+      (p) => `${p} está no fundo do poço — a vista lá de baixo não é famosa.`,
+    ],
+    leaderRemaining: [
+      (p, n) =>
+        `${p} lidera com ${n} ronda${n === 1 ? "" : "s"} por jogar — ainda não está seguro.`,
+      (p, n) =>
+        `${p} vai à frente com ${n} ronda${n === 1 ? "" : "s"} por disputar — nada está decidido.`,
+      (p, n) =>
+        `${p} segura o topo com ${n} ronda${n === 1 ? "" : "s"} restante${n === 1 ? "" : "s"} — tudo em aberto.`,
+    ],
+    leaderDone: [
+      (p) => `${p} ganha o prémio — bem jogado.`,
+      (p) => `${p} conquista o título — bem merecido.`,
+      (p) => `${p} sela o campeonato — fim de jogo, bem merecido.`,
+    ],
+    ghost: [
+      (p) => `${p} ainda não marcou um único ponto. Notável dedicação a perder.`,
+      (p) => `${p} continua a zero. Impressionante dedicação à causa.`,
+      (p) => `${p} ainda não incomodou a tabela. Uma declaração e tanto.`,
+    ],
+    fallback: [
+      (r) => `${r} terminada. A classificação não mente.`,
+      (r) => `${r} fica arrumada. A tabela falou.`,
+      (r) => `${r} fecha o capítulo. Números não têm sentimentos.`,
+    ],
+  },
+};
+
+function pick<T>(variants: T[], rand: () => number): T {
+  return variants[Math.floor(rand() * variants.length)];
+}
+
+export function templatedBanter(
+  input: BanterInput,
+  locale: BanterLocale,
+  rand: () => number = Math.random,
+): string {
   const { roundWinner, standings, badges, roundName, roundsPlayed, totalRounds } = input;
   const leader = standings[0]?.name ?? null;
   const lastPlace = standings[standings.length - 1]?.name ?? null;
@@ -50,67 +174,91 @@ export function templatedBanter(input: BanterInput, locale: BanterLocale): strin
   const bottler = badges.find((b) => b.badges.includes("bottler"));
   const ghost = badges.find((b) => b.badges.includes("ghost"));
 
-  const tpl =
-    locale === "pt"
-      ? {
-          onFireWinner: (p: string) => `${p} está a arrasar — rondas seguidas dominadas.`,
-          winner: (p: string, r: string) => `${p} arrecada ${r} — resultado limpo, sem discussão.`,
-          bottler: (p: string) => `${p} está em queda livre — chamem uma equipa de resgate.`,
-          lastPlace: (p: string) => `${p} na cauda — o jantar está a ficar caro a partir daqui.`,
-          leaderRemaining: (p: string, n: number) =>
-            `${p} lidera com ${n} ronda${n === 1 ? "" : "s"} por jogar — ainda não está seguro.`,
-          leaderDone: (p: string) => `${p} ganha o prémio — bem jogado.`,
-          ghost: (p: string) => `${p} ainda não marcou um único ponto. Notável dedicação a perder.`,
-          fallback: (r: string) => `${r} terminada. A classificação não mente.`,
-        }
-      : {
-          onFireWinner: (p: string) =>
-            `${p} is absolutely on fire — back-to-back rounds dominated.`,
-          winner: (p: string, r: string) => `${p} takes ${r} — clean result, no arguments.`,
-          bottler: (p: string) => `${p} is in freefall — someone call a rescue team.`,
-          lastPlace: (p: string) => `${p} at the bottom — dinner's looking expensive from here.`,
-          leaderRemaining: (p: string, n: number) =>
-            `${p} leads with ${n} round${n === 1 ? "" : "s"} left — not safe yet.`,
-          leaderDone: (p: string) => `${p} wins the prize — well played.`,
-          ghost: (p: string) => `${p} hasn't scored a point yet. Remarkable commitment to losing.`,
-          fallback: (r: string) => `${r} done. The standings don't lie.`,
-        };
-
+  const tpl = FALLBACK_TEMPLATES[locale];
   const parts: string[] = [];
 
   if (roundWinner) {
     parts.push(
       onFire && onFire.player === roundWinner
-        ? tpl.onFireWinner(roundWinner)
-        : tpl.winner(roundWinner, roundName),
+        ? pick(tpl.onFireWinner, rand)(roundWinner)
+        : pick(tpl.winner, rand)(roundWinner, roundName),
     );
   }
 
   if (bottler) {
-    parts.push(tpl.bottler(bottler.player));
+    parts.push(pick(tpl.bottler, rand)(bottler.player));
   } else if (lastPlace && lastPlace !== roundWinner) {
-    parts.push(tpl.lastPlace(lastPlace));
+    parts.push(pick(tpl.lastPlace, rand)(lastPlace));
   }
 
   if (leader && remaining > 0) {
-    parts.push(tpl.leaderRemaining(leader, remaining));
+    parts.push(pick(tpl.leaderRemaining, rand)(leader, remaining));
   } else if (leader && remaining === 0) {
-    parts.push(tpl.leaderDone(leader));
+    parts.push(pick(tpl.leaderDone, rand)(leader));
   }
 
   if (ghost) {
-    parts.push(tpl.ghost(ghost.player));
+    parts.push(pick(tpl.ghost, rand)(ghost.player));
   }
 
-  return parts.slice(0, 3).join(" ") || tpl.fallback(roundName);
+  return parts.slice(0, 3).join(" ") || pick(tpl.fallback, rand)(roundName);
 }
+
+export type PersonaId = "ruthless-pundit" | "hype-mc" | "deadpan-stats-nerd" | "tabloid-dramatist";
+
+export const PERSONAS: { id: PersonaId; voice: string }[] = [
+  {
+    id: "ruthless-pundit",
+    voice: "You are a ruthless fantasy football pundit — sharp, funny, no mercy.",
+  },
+  {
+    id: "hype-mc",
+    voice:
+      "You are a boxing-ring hype MC — over-the-top, breathless, treating every round result like a title fight.",
+  },
+  {
+    id: "deadpan-stats-nerd",
+    voice:
+      "You are a deadpan stats analyst — dry, clinical, minimal adjectives, letting the brutal numbers do the talking.",
+  },
+  {
+    id: "tabloid-dramatist",
+    voice:
+      "You are a tabloid gossip columnist — soap-opera framing, treating table positions like scandal and betrayal.",
+  },
+];
+
+/** Randomly picks a persona, excluding the immediately previous round's persona (if any) so the voice doesn't repeat back-to-back. */
+export function pickPersona(
+  lastPersona: PersonaId | null,
+  rand: () => number = Math.random,
+): PersonaId {
+  const candidates = PERSONAS.filter((p) => p.id !== lastPersona);
+  const pool = candidates.length > 0 ? candidates : PERSONAS;
+  return pick(pool, rand).id;
+}
+
+const LENGTH_HINTS = [
+  "Keep it to exactly 2 sentences — tight and punchy.",
+  "Write exactly 3 sentences — the default pace.",
+  "Write up to 4 sentences — a bit more colour and detail than usual.",
+];
+
+/** Randomly picks a length/shape instruction for this round's AI generation. No repeat-avoidance — low stakes if it repeats. */
+export function pickLengthHint(rand: () => number = Math.random): string {
+  return pick(LENGTH_HINTS, rand);
+}
+
+export type GeminiVoice = { personaVoice: string; lengthHint: string };
 
 export type GeminiCaller = (
   prompt: string,
+  voice: GeminiVoice,
 ) => Promise<{ en: string; pt: string; devices: string[] } | null>;
 
 async function defaultCallGemini(
   prompt: string,
+  voice: GeminiVoice,
 ): Promise<{ en: string; pt: string; devices: string[] } | null> {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
@@ -126,7 +274,7 @@ async function defaultCallGemini(
         parts: [
           {
             text: [
-              "You are a ruthless fantasy football pundit — sharp, funny, no mercy.",
+              voice.personaVoice,
               "You write a short post-round summary for a private league of friends.",
               "Rules:",
               "- Name the round winner and their score. If a round prize is listed, mention it once as a reward they earned — it is a positive thing, not a penalty.",
@@ -135,10 +283,13 @@ async function defaultCallGemini(
               "- If the league leader changed this round, call it out as a notable moment.",
               "- If upcoming rounds are listed, reference the next one to frame what's at stake.",
               "- If badges are listed (onFire, onRise, bottler, ghost), weave them in naturally.",
-              "- Maximum 3 sentences. No hashtags, no emojis, no filler like 'Alright folks' or 'Well well well'. Just the pundit take.",
+              "- If position changes are listed, call out the biggest riser or faller by name.",
+              "- If a 'needs to average' figure is given, state it as a concrete target the leader must hit.",
+              "- If a new all-time high or low score is mentioned, treat it as the headline moment of the round.",
+              `- ${voice.lengthHint} No hashtags, no emojis, no filler like 'Alright folks' or 'Well well well'. Just the take, in character.`,
               "- You may be shown up to 3 previous round summaries and a list of narrative devices already used recently.",
               "  Pick a different angle, joke, and phrasing this round — do not reuse them. Never mention that you're avoiding repetition or refer to previous rounds' commentary.",
-              "Output JSON with three fields: 'en' (British English), 'pt' (European Portuguese, pt-PT — informal, expressive, idiomatically natural; not Brazilian Portuguese, not a literal translation of the English), and 'devices' — a short array (1-4 items) of kebab-case tags naming the narrative angles you used this round (e.g. 'leader-change-callout', 'last-place-roast', 'prize-mention', 'win-probability-comparison', 'badge-callout', 'next-round-teaser').",
+              "Output JSON with three fields: 'en' (British English), 'pt' (European Portuguese, pt-PT — informal, expressive, idiomatically natural; not Brazilian Portuguese, not a literal translation of the English), and 'devices' — a short array (1-4 items) of kebab-case tags naming the narrative angles you used this round (e.g. 'leader-change-callout', 'last-place-roast', 'prize-mention', 'win-probability-comparison', 'badge-callout', 'next-round-teaser', 'position-change-callout', 'path-to-victory-target', 'record-score-callout').",
             ].join(" "),
           },
         ],
@@ -207,6 +358,9 @@ export function buildPrompt(input: BanterInput): string {
     leaderChanged,
     priorSummaries,
     priorDevices,
+    positionChanges,
+    pathToVictory,
+    scoreRecords,
   } = input;
   const remaining = totalRounds - roundsPlayed;
 
@@ -248,6 +402,29 @@ export function buildPrompt(input: BanterInput): string {
     .map((b) => `${b.player}: ${b.badges.join(", ")}`)
     .join("; ");
 
+  const positionChangeLines = positionChanges
+    .map((c) => `${c.name} ${c.from > c.to ? "climbed" : "dropped"} from #${c.from} to #${c.to}`)
+    .join("; ");
+
+  const pathToVictoryNote =
+    pathToVictory && leader
+      ? `To keep a 90% chance of winning outright, ${leader.name} needs to average at least ${Math.round(pathToVictory.requiredAverage)} points per remaining round${pathToVictory.chaserName ? ` (benchmarked against ${pathToVictory.chaserName}'s pace)` : ""}.`
+      : null;
+
+  const recordNote =
+    scoreRecords && (scoreRecords.newHigh || scoreRecords.newLow)
+      ? [
+          scoreRecords.newHigh
+            ? `${scoreRecords.highest.name}'s ${scoreRecords.highest.points} this round is a new all-time high score for this league.`
+            : null,
+          scoreRecords.newLow
+            ? `${scoreRecords.lowest.name}'s ${scoreRecords.lowest.points} this round is a new all-time low score for this league.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : null;
+
   return [
     `League: ${leagueName}. ${roundsPlayed} of ${totalRounds} rounds played, ${remaining} remaining.`,
     `Round just finished: ${roundName}. ${winnerNote}`,
@@ -259,6 +436,9 @@ export function buildPrompt(input: BanterInput): string {
     upcomingNote,
     historyLines ? `Previous round winners: ${historyLines}.` : null,
     badgeLines ? `Badges earned: ${badgeLines}.` : null,
+    positionChangeLines ? `League position changes this round: ${positionChangeLines}.` : null,
+    pathToVictoryNote,
+    recordNote,
     priorSummaries.length > 0
       ? `Previous banter (avoid repeating these jokes/phrasing): ${priorSummaries.map((s, i) => `${i + 1}) ${s}`).join(" ")}`
       : null,
@@ -274,18 +454,24 @@ export function buildPrompt(input: BanterInput): string {
  * Generate banter for a round in both locales. AI when available, templated
  * otherwise. `callGemini` is accepted rather than hardcoded so the AI-fails ->
  * templated-fallback path is directly testable with a fake caller, not only
- * via `fetch` mocking.
+ * via `fetch` mocking. `rand` is accepted for the same reason: it drives
+ * persona pick, length hint, and fallback phrasing selection.
  */
 export async function getBanter(
   input: BanterInput,
   callGemini: GeminiCaller = defaultCallGemini,
-): Promise<{ en: string; pt: string; ai: boolean; devices: string[] }> {
-  const ai = await callGemini(buildPrompt(input));
-  if (ai) return { en: ai.en, pt: ai.pt, ai: true, devices: ai.devices };
+  rand: () => number = Math.random,
+): Promise<{ en: string; pt: string; ai: boolean; devices: string[]; persona: PersonaId | null }> {
+  const persona = pickPersona(input.lastPersona, rand);
+  const personaVoice = PERSONAS.find((p) => p.id === persona)!.voice;
+  const lengthHint = pickLengthHint(rand);
+  const ai = await callGemini(buildPrompt(input), { personaVoice, lengthHint });
+  if (ai) return { en: ai.en, pt: ai.pt, ai: true, devices: ai.devices, persona };
   return {
-    en: templatedBanter(input, "en"),
-    pt: templatedBanter(input, "pt"),
+    en: templatedBanter(input, "en", rand),
+    pt: templatedBanter(input, "pt", rand),
     ai: false,
     devices: [],
+    persona: null,
   };
 }

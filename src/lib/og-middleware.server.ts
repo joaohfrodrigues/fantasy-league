@@ -225,6 +225,10 @@ async function generateRecapImage(slug: string, roundId: string): Promise<Respon
           leaderChanged,
           priorSummaries: [],
           priorDevices: [],
+          lastPersona: null,
+          positionChanges: [],
+          pathToVictory: null,
+          scoreRecords: null,
         },
         "en",
       );
